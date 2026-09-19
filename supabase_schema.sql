@@ -1,6 +1,7 @@
 -- ====================================================================
--- CODENOVA — SUPABASE POSTGRESQL PRODUCTION SCHEMA
+-- FINDIT AI — SUPABASE POSTGRESQL PRODUCTION SCHEMA
 -- AI-Powered Campus Lost & Found
+-- "Lost something? Let's find it."
 -- ====================================================================
 
 -- 1. Enable required extensions
@@ -150,7 +151,7 @@ BEGIN
         gen_random_uuid(),
         NEW.id,
         'WELCOME',
-        'Welcome to CodeNova!',
+        'Welcome to FindIt AI!',
         'Explore campus lost & found items or report a lost item to get started.'
     );
 

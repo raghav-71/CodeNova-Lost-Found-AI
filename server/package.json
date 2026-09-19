@@ -1,7 +1,7 @@
 {
-  "name": "codenova-server",
+  "name": "findit-ai-server",
   "version": "1.0.0",
-  "description": "CodeNova AI Lost and Found Server",
+  "description": "FindIt AI Lost and Found Server",
   "main": "dist/index.js",
   "scripts": {
     "dev": "tsx watch src/index.ts",

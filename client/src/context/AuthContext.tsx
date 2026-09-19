@@ -18,9 +18,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
-  const [token, setToken] = useState<string | null>(
-    localStorage.getItem('findit_auth_token') || localStorage.getItem('codenova_auth_token')
-  );
+  const [token, setToken] = useState<string | null>(localStorage.getItem('findit_auth_token'));
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
   useEffect(() => {

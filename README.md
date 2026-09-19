@@ -1,14 +1,17 @@
-# 🚀 CODENOVA — AI-Powered Campus Lost & Found Platform
+# 🚀 FINDIT AI — Intelligent Campus Lost & Found Platform
 
-CodeNova is an intelligent campus lost & found platform built to unify campus property recovery. It leverages Google Gemini AI with a robust deterministic fuzzy matching fallback, secure claim verification workflows, and privacy safeguards to help students and staff recover lost items safely and quickly.
+> **"Lost something? Let's find it."**
+
+FindIt AI is an intelligent campus lost & found platform built to unify campus property recovery. It leverages Google Gemini AI with a robust deterministic fuzzy matching fallback, natural language intent search, secure claim verification workflows, and privacy safeguards to help students and staff recover lost items safely and quickly.
 
 ---
 
 ## ✨ Key Features
 
-1. **AI-Assisted Potential Matching (Dual-Tier Engine)**:
-   - **Tier 1 (Gemini API)**: Deep semantic analysis comparing descriptions, distinctive characteristics, campus zones, and timestamps.
-   - **Tier 2 (Deterministic Fallback)**: Tokenized cosine similarity, category hierarchies, campus topology proximity, and temporal decay scoring. Works 100% offline with zero dependencies!
+1. **Intelligent Natural Language Search & AI Matching**:
+   - Describe what you lost or found in your own words (e.g. *"I lost my black Samsung phone near the college library yesterday"*).
+   - Gemini 1.5 Flash extracts entities, resolves relative dates, detects campus locations, and scores semantic similarity.
+   - Dual-tier engine with instant offline fallback.
    - **AI Safety Compliance**: AI output is strictly marked as *Potential Match (AI Suggested)*. Zero automated ownership approvals.
 2. **Ownership Claim Verification Hub**:
    - Multi-factor verification questionnaires (specific location, date/time, distinctive marks, proof notes) prevent guessing and fraudulent claims.
@@ -27,9 +30,9 @@ CodeNova is an intelligent campus lost & found platform built to unify campus pr
 
 ## 🛠️ Technology Stack
 
-- **Frontend**: React 18, TypeScript, Vite, Tailwind CSS, Lucide Icons, Canvas Confetti
+- **Frontend**: React 19, TypeScript, Vite, Tailwind CSS, Lucide Icons, Canvas Confetti
 - **Backend**: Node.js, Express, TypeScript, Multer, JWT, BcryptJS
-- **Database**: Relational SQLite database engine (`sql.js` pure WebAssembly with zero native compilation dependencies)
+- **Database**: Supabase PostgreSQL + SQLite local fallback (`sql.js`)
 - **AI**: Google Gemini Generative AI SDK (`@google/generative-ai`) + Custom Deterministic Fuzzy Matching Engine
 
 ---
@@ -47,12 +50,9 @@ cd ../client && npm install
 Copy `.env.example` to `.env`:
 ```env
 PORT=5000
-JWT_SECRET=codenova_jwt_super_secret_key_2026_campus_ai
+JWT_SECRET=findit_jwt_super_secret_key_2026_campus_ai
 NODE_ENV=development
 CLIENT_URL=http://localhost:5173
-
-# Optional: Add your Gemini API Key. (If omitted, the app automatically runs the full deterministic matching engine!)
-GEMINI_API_KEY=
 ```
 
 ### 3. Run Development Servers

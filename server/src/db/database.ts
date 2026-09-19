@@ -13,7 +13,6 @@ export interface DatabaseService {
 let dbInstance: SqlJsDatabase | null = null;
 const dbDir = path.resolve(process.cwd(), 'data');
 const dbPath = path.join(dbDir, 'findit.sqlite');
-const legacyDbPath = path.join(dbDir, 'codenova.sqlite');
 
 export async function initDatabase(): Promise<DatabaseService> {
   if (!fs.existsSync(dbDir)) {
@@ -24,9 +23,6 @@ export async function initDatabase(): Promise<DatabaseService> {
 
   if (fs.existsSync(dbPath)) {
     const fileBuffer = fs.readFileSync(dbPath);
-    dbInstance = new SQL.Database(fileBuffer);
-  } else if (fs.existsSync(legacyDbPath)) {
-    const fileBuffer = fs.readFileSync(legacyDbPath);
     dbInstance = new SQL.Database(fileBuffer);
   } else {
     dbInstance = new SQL.Database();

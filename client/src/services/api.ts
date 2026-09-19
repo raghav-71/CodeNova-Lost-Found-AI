@@ -2,7 +2,7 @@ const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api'
 
 class ApiClient {
   private getToken(): string | null {
-    return localStorage.getItem('findit_auth_token') || localStorage.getItem('codenova_auth_token');
+    return localStorage.getItem('findit_auth_token');
   }
 
   private async request<T = any>(endpoint: string, options: RequestInit = {}): Promise<T> {
