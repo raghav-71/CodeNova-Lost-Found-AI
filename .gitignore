@@ -1,0 +1,20 @@
+# Dependencies and build output
+node_modules/
+dist/
+client/dist/
+server/dist/
+
+# Local environment and runtime data
+.env
+.env.*
+!.env.example
+server/data/
+server/uploads/
+
+# Logs and local tooling
+*.log
+npm-debug.log*
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json

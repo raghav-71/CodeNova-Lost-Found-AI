@@ -1,0 +1,16 @@
+{
+  "name": "codenova-lost-and-found",
+  "version": "1.0.0",
+  "description": "CodeNova — AI-Powered Campus Lost & Found Platform",
+  "scripts": {
+    "dev:server": "cd server && npm run dev",
+    "dev:client": "cd client && npm run dev",
+    "seed": "cd server && npm run seed",
+    "build:client": "cd client && npm run build",
+    "build:server": "cd server && npm run build",
+    "build": "npm run build:server && npm run build:client"
+  },
+  "keywords": ["lost-and-found", "ai", "campus", "react", "nodejs", "gemini"],
+  "author": "CodeNova Team",
+  "license": "MIT"
+}

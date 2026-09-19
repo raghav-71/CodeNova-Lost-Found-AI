@@ -1,0 +1,506 @@
+import React, { useState, useEffect, useCallback } from 'react';
+import { useParams, useNavigate, Link } from 'react-router-dom';
+import { api, API_BASE_URL } from '../services/api.js';
+import { useAuth } from '../context/AuthContext.js';
+import { useToast } from '../context/ToastContext.js';
+import { Item, PotentialMatch, Claim } from '../types/index.js';
+import { StatusBadge, TypeBadge } from '../components/StatusBadge.js';
+import { StatusTimeline } from '../components/StatusTimeline.js';
+import { AIMatchCard } from '../components/AIMatchCard.js';
+import { ClaimModal } from '../components/ClaimModal.js';
+import { DetailSkeleton } from '../components/SkeletonLoader.js';
+import confetti from 'canvas-confetti';
+import { 
+  Sparkles, 
+  MapPin, 
+  Calendar, 
+  Tag, 
+  ShieldCheck, 
+  AlertCircle, 
+  CheckCircle2, 
+  Clock, 
+  RefreshCw, 
+  ArrowLeft, 
+  Check, 
+  FileText
+} from 'lucide-react';
+
+export function ItemDetailsPage() {
+  const { id } = useParams<{ id: string }>();
+  const { user } = useAuth();
+  const { showToast } = useToast();
+  const navigate = useNavigate();
+
+  const [item, setItem] = useState<Item | null>(null);
+  const [isOwner, setIsOwner] = useState(false);
+  const [matches, setMatches] = useState<PotentialMatch[]>([]);
+  const [userClaim, setUserClaim] = useState<Claim | null>(null);
+  const [claims, setClaims] = useState<Claim[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isRematching, setIsRematching] = useState(false);
+  
+  // Claim Modal
+  const [isClaimModalOpen, setIsClaimModalOpen] = useState(false);
+  const [claimTargetItem, setClaimTargetItem] = useState<Item | PotentialMatch | null>(null);
+
+  const loadItemDetails = useCallback(async () => {
+    if (!id) return;
+    setIsLoading(true);
+    try {
+      const res = await api.getItemById(id);
+      setItem(res.item);
+      setIsOwner(res.isOwner);
+      setMatches(res.matches || []);
+      setUserClaim(res.userClaim || null);
+      setClaims(res.claims || []);
+    } catch (err: any) {
+      console.error('Failed to load item:', err);
+      showToast({
+        type: 'error',
+        title: 'Error',
+        message: err.message || 'Failed to load item details.'
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  }, [id, showToast]);
+
+  useEffect(() => {
+    loadItemDetails();
+  }, [loadItemDetails]);
+
+  const handleRematch = async () => {
+    if (!id) return;
+    setIsRematching(true);
+    try {
+      const res = await api.rematchItem(id);
+      showToast({
+        type: 'info',
+        title: 'AI Matching Complete',
+        message: `Discovered ${res.matchesFound} potential matching records.`
+      });
+      loadItemDetails();
+    } catch (err: any) {
+      showToast({
+        type: 'error',
+        title: 'Matching Failed',
+        message: err.message || 'Could not execute AI rematch.'
+      });
+    } finally {
+      setIsRematching(false);
+    }
+  };
+
+  const handleClaimStatusUpdate = async (claimId: string, newStatus: 'APPROVED' | 'REJECTED') => {
+    try {
+      await api.updateClaimStatus(claimId, newStatus);
+      if (newStatus === 'APPROVED') {
+        confetti({
+          particleCount: 120,
+          spread: 70,
+          origin: { y: 0.6 }
+        });
+        showToast({
+          type: 'success',
+          title: 'Claim Approved! 🎉',
+          message: 'Item has been verified and marked as RESOLVED. Coordinates shared with claimant.'
+        });
+      } else {
+        showToast({
+          type: 'info',
+          title: 'Claim Rejected',
+          message: 'Claim request updated.'
+        });
+      }
+      loadItemDetails();
+    } catch (err: any) {
+      showToast({
+        type: 'error',
+        title: 'Action Failed',
+        message: err.message || 'Failed to update claim.'
+      });
+    }
+  };
+
+  const getImageUrl = (url?: string) => {
+    if (!url) return 'https://images.unsplash.com/photo-1586769852044-692d6e3703f0?w=800&auto=format&fit=crop&q=80';
+    if (url.startsWith('http')) return url;
+    const cleanUrl = url.startsWith('/') ? url : `/${url}`;
+    return `${API_BASE_URL.replace('/api', '')}${cleanUrl}`;
+  };
+
+  if (isLoading) {
+    return (
+      <div className="max-w-7xl mx-auto px-4 py-12">
+        <DetailSkeleton />
+      </div>
+    );
+  }
+
+  if (!item) {
+    return (
+      <div className="max-w-xl mx-auto px-4 py-20 text-center space-y-4">
+        <div className="w-16 h-16 rounded-full bg-[#FFF1F2] text-[#E11D48] flex items-center justify-center mx-auto">
+          <AlertCircle className="w-8 h-8" />
+        </div>
+        <h2 className="text-xl font-bold text-[#102018]">Item Not Found</h2>
+        <p className="text-xs text-[#66756C]">The requested campus record could not be found or has been removed.</p>
+        <Link to="/items" className="btn-primary inline-flex items-center gap-2 px-5 py-2.5 text-xs">
+          <ArrowLeft className="w-4 h-4" />
+          <span>Back to Directory</span>
+        </Link>
+      </div>
+    );
+  }
+
+  return (
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+      {/* Navigation & Actions Top Bar */}
+      <div className="flex items-center justify-between">
+        <Link
+          to="/items"
+          className="inline-flex items-center gap-2 text-xs font-bold text-[#66756C] hover:text-[#102018] transition-colors"
+        >
+          <ArrowLeft className="w-4 h-4 text-[#35B86B]" />
+          <span>Back to Directory</span>
+        </Link>
+
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleRematch}
+            disabled={isRematching}
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold bg-white hover:bg-[#EEF8F1] text-[#168A4A] border border-[#D5ECD9] transition-all disabled:opacity-50 shadow-sm"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 text-[#35B86B] ${isRematching ? 'animate-spin' : ''}`} />
+            <span>{isRematching ? 'Scanning AI...' : 'Re-run AI Match'}</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Main Grid: Left Details & Right Actions/Matches */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+        {/* Left Column: Image, Description, Characteristics, Timeline */}
+        <div className="lg:col-span-7 space-y-6">
+          {/* Main Visual Image Card */}
+          <div className="relative rounded-3xl bg-white border border-[#E3ECE6] overflow-hidden shadow-[0_12px_32px_-4px_rgba(22,138,74,0.08)]">
+            <div className="aspect-[16/10] w-full bg-[#EEF8F1] overflow-hidden">
+              <img
+                src={getImageUrl(item.primary_image)}
+                alt={item.title}
+                className="w-full h-full object-cover"
+              />
+            </div>
+
+            {/* Top Badges */}
+            <div className="absolute top-4 left-4 flex items-center gap-2">
+              <TypeBadge type={item.type} size="md" />
+              <span className="text-xs font-bold bg-white/90 backdrop-blur-md text-[#102018] px-3 py-1 rounded-xl border border-white/60 shadow-sm flex items-center gap-1.5">
+                <Tag className="w-3.5 h-3.5 text-[#35B86B]" />
+                {item.category}
+              </span>
+            </div>
+
+            <div className="absolute top-4 right-4">
+              <StatusBadge status={item.status} size="md" />
+            </div>
+          </div>
+
+          {/* Details Card */}
+          <div className="rounded-3xl bg-white border border-[#E3ECE6] p-6 sm:p-8 space-y-6 shadow-[0_10px_28px_-4px_rgba(22,138,74,0.06)]">
+            <div>
+              <h1 className="text-2xl sm:text-3xl font-extrabold text-[#102018] tracking-tight leading-snug">
+                {item.title}
+              </h1>
+              <p className="text-xs text-[#66756C] font-medium mt-1">
+                Reported on {item.date} {item.time ? `at ${item.time}` : ''}
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-[#94A39B]">Detailed Description</h3>
+              <p className="text-sm text-[#2D3D34] leading-relaxed whitespace-pre-line font-medium">
+                {item.description}
+              </p>
+            </div>
+
+            {/* Distinguishing Characteristics */}
+            {item.characteristics && (
+              <div className="p-4 rounded-2xl bg-[#EEF8F1] border border-[#D5ECD9] space-y-1.5">
+                <div className="flex items-center gap-1.5 text-xs font-bold text-[#168A4A]">
+                  <Sparkles className="w-4 h-4 text-[#35B86B]" />
+                  <span>Distinctive Characteristics & Identifying Marks</span>
+                </div>
+                <p className="text-xs text-[#2D3D34] leading-relaxed font-medium">
+                  {item.characteristics}
+                </p>
+              </div>
+            )}
+
+            {/* Location & Time Info Grid */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-4 border-t border-[#E3ECE6]">
+              <div className="flex items-start gap-3">
+                <div className="p-2.5 rounded-xl bg-[#EEF8F1] text-[#168A4A] border border-[#D5ECD9]">
+                  <MapPin className="w-5 h-5 text-[#35B86B]" />
+                </div>
+                <div>
+                  <div className="text-[11px] font-bold text-[#94A39B] uppercase">Campus Location</div>
+                  <div className="text-sm font-bold text-[#102018]">{item.location}</div>
+                  {item.building_zone && (
+                    <div className="text-xs text-[#168A4A] font-semibold">{item.building_zone}</div>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex items-start gap-3">
+                <div className="p-2.5 rounded-xl bg-[#EEF8F1] text-[#168A4A] border border-[#D5ECD9]">
+                  <Calendar className="w-5 h-5 text-[#35B86B]" />
+                </div>
+                <div>
+                  <div className="text-[11px] font-bold text-[#94A39B] uppercase">Date & Time Logged</div>
+                  <div className="text-sm font-bold text-[#102018]">{item.date}</div>
+                  {item.time && <div className="text-xs text-[#66756C] font-medium">{item.time}</div>}
+                </div>
+              </div>
+            </div>
+
+            {/* Status Timeline */}
+            <div className="pt-6 border-t border-[#E3ECE6] space-y-3">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-[#94A39B]">Recovery Status Tracking</h3>
+              <StatusTimeline
+                status={item.status}
+                hasMatch={matches.length > 0}
+                hasClaim={claims.length > 0 || !!userClaim}
+              />
+            </div>
+          </div>
+
+          {/* If Owner: Received Claims Inspection */}
+          {isOwner && claims.length > 0 && (
+            <div className="rounded-3xl bg-white border border-[#FDE68A] p-6 sm:p-8 space-y-4 shadow-sm">
+              <div className="flex items-center gap-2">
+                <FileText className="w-5 h-5 text-[#D97706]" />
+                <div>
+                  <h3 className="text-lg font-bold text-[#102018]">Ownership Claims Received ({claims.length})</h3>
+                  <p className="text-xs text-[#66756C] font-medium">Review verification responses provided by claimants</p>
+                </div>
+              </div>
+
+              <div className="space-y-4 pt-2">
+                {claims.map((c) => (
+                  <div
+                    key={c.id}
+                    className="p-5 rounded-2xl bg-[#F7FBF8] border border-[#E3ECE6] space-y-3 text-xs"
+                  >
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex items-center gap-3">
+                        <img
+                          src={c.claimant_avatar || `https://api.dicebear.com/7.x/bottts/svg?seed=${c.claimant_name}`}
+                          alt={c.claimant_name}
+                          className="w-9 h-9 rounded-xl object-cover bg-white border border-[#E3ECE6]"
+                        />
+                        <div>
+                          <div className="font-bold text-sm text-[#102018]">{c.claimant_name}</div>
+                          <div className="text-[11px] text-[#168A4A] font-semibold">{c.claimant_campus}</div>
+                        </div>
+                      </div>
+
+                      <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${
+                        c.status === 'APPROVED'
+                          ? 'bg-[#EEF8F1] text-[#168A4A] border border-[#D5ECD9]'
+                          : c.status === 'REJECTED'
+                          ? 'bg-[#FFF1F2] text-[#E11D48] border border-[#FFE4E6]'
+                          : 'bg-[#FEF3C7] text-[#92400E] border border-[#FDE68A]'
+                      }`}>
+                        {c.status}
+                      </span>
+                    </div>
+
+                    <div className="space-y-2 bg-white p-3.5 rounded-xl border border-[#E3ECE6]">
+                      <div>
+                        <span className="font-bold text-[#66756C]">Where Lost: </span>
+                        <span className="text-[#102018] font-medium">{c.location_lost}</span>
+                      </div>
+                      <div>
+                        <span className="font-bold text-[#66756C]">Date Lost: </span>
+                        <span className="text-[#102018] font-medium">{c.date_lost}</span>
+                      </div>
+                      <div>
+                        <span className="font-bold text-[#66756C]">Identifying Details: </span>
+                        <span className="text-[#102018] font-medium">{c.identifying_details}</span>
+                      </div>
+                      {c.proof_notes && (
+                        <div>
+                          <span className="font-bold text-[#66756C]">Proof Notes: </span>
+                          <span className="text-[#102018] font-medium">{c.proof_notes}</span>
+                        </div>
+                      )}
+                    </div>
+
+                    {c.status === 'PENDING' && (
+                      <div className="flex items-center justify-end gap-2 pt-2">
+                        <button
+                          onClick={() => handleClaimStatusUpdate(c.id, 'REJECTED')}
+                          className="px-3.5 py-1.5 rounded-xl bg-[#FFF1F2] hover:bg-[#FFE4E6] text-[#E11D48] border border-[#FFE4E6] font-bold"
+                        >
+                          Reject Claim
+                        </button>
+                        <button
+                          onClick={() => handleClaimStatusUpdate(c.id, 'APPROVED')}
+                          className="btn-primary px-4 py-1.5 text-xs flex items-center gap-1.5"
+                        >
+                          <Check className="w-3.5 h-3.5" />
+                          <span>Approve Claim & Resolve Item</span>
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Right Column: Actions, Reporter Profile, AI Potential Matches */}
+        <div className="lg:col-span-5 space-y-6">
+          {/* Claim Action Box */}
+          <div className="rounded-3xl bg-white border border-[#D5ECD9] p-6 sm:p-7 shadow-[0_12px_32px_-4px_rgba(22,138,74,0.08)] space-y-4">
+            <div className="flex items-center gap-2.5">
+              <div className="w-9 h-9 rounded-xl bg-[#EEF8F1] border border-[#D5ECD9] flex items-center justify-center text-[#168A4A]">
+                <ShieldCheck className="w-5 h-5 text-[#35B86B]" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-[#102018]">Item Actions</h3>
+                <p className="text-[11px] text-[#66756C] font-medium">Direct campus verification</p>
+              </div>
+            </div>
+
+            {item.status === 'RESOLVED' ? (
+              <div className="p-4 rounded-2xl bg-[#EEF8F1] border border-[#D5ECD9] text-[#168A4A] text-xs space-y-1.5">
+                <div className="flex items-center gap-1.5 font-bold">
+                  <CheckCircle2 className="w-4 h-4 text-[#35B86B]" />
+                  <span>Item Successfully Recovered 🎉</span>
+                </div>
+                <p className="text-[11px] text-[#168A4A]/90 font-medium">
+                  This report has been completed and ownership verified.
+                </p>
+              </div>
+            ) : userClaim ? (
+              <div className="p-4 rounded-2xl bg-[#FEF3C7] border border-[#FDE68A] text-[#92400E] text-xs space-y-1.5">
+                <div className="flex items-center gap-1.5 font-bold">
+                  <Clock className="w-4 h-4 text-[#D97706]" />
+                  <span>Your Claim is {userClaim.status}</span>
+                </div>
+                <p className="text-[11px] text-[#92400E]/90 font-medium">
+                  The finder has received your questionnaire and will review shortly.
+                </p>
+              </div>
+            ) : isOwner ? (
+              <div className="p-4 rounded-2xl bg-[#EEF8F1] border border-[#D5ECD9] text-[#168A4A] text-xs space-y-2">
+                <div className="font-bold text-[#168A4A]">You reported this item</div>
+                <p className="text-[11px] text-[#2D3D34] leading-relaxed font-medium">
+                  You will receive notifications whenever a student submits an ownership claim or an AI potential match is detected.
+                </p>
+              </div>
+            ) : item.type === 'FOUND' ? (
+              <div className="space-y-3">
+                <p className="text-xs text-[#66756C] leading-relaxed font-medium">
+                  Do you believe this found item belongs to you? Complete our verification questionnaire to initiate recovery.
+                </p>
+                <button
+                  onClick={() => {
+                    setClaimTargetItem(item);
+                    setIsClaimModalOpen(true);
+                  }}
+                  className="btn-primary w-full py-3 text-xs sm:text-sm flex items-center justify-center gap-2"
+                >
+                  <ShieldCheck className="w-4 h-4" />
+                  <span>Claim This Item</span>
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <p className="text-xs text-[#66756C] leading-relaxed font-medium">
+                  Found this item on campus? Report it to automatically connect with the student who lost it.
+                </p>
+                <Link
+                  to="/report/found"
+                  className="btn-primary w-full py-3 text-xs sm:text-sm flex items-center justify-center gap-2"
+                >
+                  <span>Report Matching Found Item</span>
+                </Link>
+              </div>
+            )}
+          </div>
+
+          {/* Privacy-Safe Reporter Meta Card */}
+          <div className="rounded-3xl bg-white border border-[#E3ECE6] p-6 space-y-4 shadow-sm">
+            <h3 className="text-xs font-bold uppercase tracking-wider text-[#94A39B]">Reporter Profile</h3>
+            <div className="flex items-center gap-3">
+              <img
+                src={item.reporter_avatar || `https://api.dicebear.com/7.x/bottts/svg?seed=${item.reporter_name}`}
+                alt={item.reporter_name}
+                className="w-12 h-12 rounded-2xl object-cover border border-[#E3ECE6] bg-[#EEF8F1]"
+              />
+              <div>
+                <div className="text-sm font-bold text-[#102018]">{item.reporter_name}</div>
+                <div className="text-xs text-[#168A4A] font-bold">{item.reporter_campus}</div>
+                <div className="text-[10px] text-[#94A39B] font-medium mt-0.5">Campus Community Member</div>
+              </div>
+            </div>
+
+            <div className="pt-3 border-t border-[#E3ECE6] flex items-center gap-2 text-[11px] text-[#66756C] font-medium">
+              <ShieldCheck className="w-3.5 h-3.5 text-[#35B86B] shrink-0" />
+              <span>Personal contact details protected until claim verification.</span>
+            </div>
+          </div>
+
+          {/* AI Potential Matches Panel */}
+          <div className="space-y-4">
+            <div className="flex items-center gap-2">
+              <Sparkles className="w-4 h-4 text-[#35B86B]" />
+              <h3 className="text-sm font-bold text-[#102018]">
+                AI Potential Matches ({matches.length})
+              </h3>
+            </div>
+
+            {matches.length === 0 ? (
+              <div className="rounded-2xl bg-white border border-[#E3ECE6] p-6 text-center text-xs text-[#66756C] space-y-1 shadow-sm font-medium">
+                <p>No potential matches discovered yet.</p>
+                <p className="text-[11px] text-[#94A39B]">Our AI continuously scans new campus reports 24/7.</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {matches.map((m) => (
+                  <AIMatchCard
+                    key={m.match_id}
+                    match={m}
+                    originItemId={item.id}
+                    onClaimClick={(matchItem) => {
+                      setClaimTargetItem(matchItem);
+                      setIsClaimModalOpen(true);
+                    }}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Claim Modal */}
+      {isClaimModalOpen && claimTargetItem && (
+        <ClaimModal
+          item={claimTargetItem}
+          isOpen={isClaimModalOpen}
+          onClose={() => {
+            setIsClaimModalOpen(false);
+            setClaimTargetItem(null);
+          }}
+          onSuccess={() => {
+            loadItemDetails();
+          }}
+        />
+      )}
+    </div>
+  );
+}
