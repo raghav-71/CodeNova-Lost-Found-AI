@@ -3,8 +3,9 @@ import { useNavigate } from 'react-router-dom';
 import { api } from '../services/api.js';
 import { useAuth } from '../context/AuthContext.js';
 import { useToast } from '../context/ToastContext.js';
-import { ItemCategory } from '../types/index.js';
+import { ItemCategory, ConsistencyCheckResult } from '../types/index.js';
 import { uploadItemImageToSupabase, isSupabaseConfigured } from '../services/supabase.js';
+import { MultimodalMismatchModal } from '../components/MultimodalMismatchModal.js';
 import { 
   Sparkles, 
   Upload, 
@@ -63,6 +64,10 @@ export function ReportLostPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Multimodal AI Verification State
+  const [mismatchModalOpen, setMismatchModalOpen] = useState(false);
+  const [detectedConsistency, setDetectedConsistency] = useState<ConsistencyCheckResult | null>(null);
+
   const handleImageChange = (file: File) => {
     if (!file.type.match(/^image\/(jpeg|jpg|png|webp)$/i)) {
       setError('Please upload a valid JPG, PNG, or WebP image.');
@@ -79,21 +84,8 @@ export function ReportLostPage() {
     reader.readAsDataURL(file);
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError(null);
-
-    if (!title.trim() || !description.trim()) {
-      setError('Item title and description are required.');
-      return;
-    }
-
+  const executeSubmission = async () => {
     const finalLocation = location === 'Other Campus Location' ? customLocation.trim() : location;
-    if (!finalLocation) {
-      setError('Please specify the campus location.');
-      return;
-    }
-
     setIsSubmitting(true);
     try {
       let uploadedImageUrl: string | undefined = undefined;
@@ -123,11 +115,19 @@ export function ReportLostPage() {
 
       const res = await api.createItem(formData);
 
-      showToast({
-        type: 'success',
-        title: 'Lost Item Reported',
-        message: `Successfully listed! AI detected ${res.matchesFound} potential matches in campus records.`
-      });
+      if (res.consistency?.has_mismatch) {
+        showToast({
+          type: 'info',
+          title: 'Report Published with Discrepancy Note',
+          message: res.consistency.warning_message || 'Report logged. AI will evaluate matches using both text and image cues.'
+        });
+      } else {
+        showToast({
+          type: 'success',
+          title: 'Lost Item Reported',
+          message: `Successfully listed! AI detected ${res.matchesFound} potential matches in campus records.`
+        });
+      }
 
       navigate(`/items/${res.item.id}`);
     } catch (err: any) {
@@ -139,7 +139,49 @@ export function ReportLostPage() {
       });
     } finally {
       setIsSubmitting(false);
+      setMismatchModalOpen(false);
     }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+
+    if (!title.trim() || !description.trim()) {
+      setError('Item title and description are required.');
+      return;
+    }
+
+    const finalLocation = location === 'Other Campus Location' ? customLocation.trim() : location;
+    if (!finalLocation) {
+      setError('Please specify the campus location.');
+      return;
+    }
+
+    // Pre-validate Image + Text consistency if image is provided
+    if (imageFile) {
+      setIsSubmitting(true);
+      try {
+        const verifyForm = new FormData();
+        verifyForm.append('title', title.trim());
+        verifyForm.append('description', description.trim());
+        verifyForm.append('category', category);
+        verifyForm.append('image', imageFile);
+
+        const verifyRes = await api.verifyImage(verifyForm);
+        if (verifyRes.consistency && verifyRes.consistency.has_mismatch) {
+          setDetectedConsistency(verifyRes.consistency);
+          setMismatchModalOpen(true);
+          setIsSubmitting(false);
+          return;
+        }
+      } catch (verifyErr) {
+        console.warn('Image verification check failed, proceeding with direct creation:', verifyErr);
+      }
+      setIsSubmitting(false);
+    }
+
+    await executeSubmission();
   };
 
   return (
@@ -398,6 +440,23 @@ export function ReportLostPage() {
             </button>
           </div>
         </form>
+
+        {/* Multimodal Contradiction & Warning Modal */}
+        {detectedConsistency && (
+          <MultimodalMismatchModal
+            isOpen={mismatchModalOpen}
+            consistency={detectedConsistency}
+            isSubmitting={isSubmitting}
+            onEditDetails={() => {
+              setMismatchModalOpen(false);
+              // Focus user back to review details
+            }}
+            onContinueAnyway={() => {
+              executeSubmission();
+            }}
+            onClose={() => setMismatchModalOpen(false)}
+          />
+        )}
       </div>
     </div>
   );

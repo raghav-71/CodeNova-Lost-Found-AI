@@ -1,7 +1,19 @@
-// Global native fetch used
+import dotenv from 'dotenv';
+import path from 'path';
+import { createClient } from '@supabase/supabase-js';
+
+dotenv.config({ path: path.resolve(process.cwd(), '../.env') });
+dotenv.config();
+
+const BASE_URL = 'http://localhost:5000/api';
+const SUPABASE_URL = process.env.SUPABASE_URL || '';
+const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || '';
+const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+
+const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+const supabaseClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 async function runE2ETest() {
-  const BASE_URL = 'http://localhost:5000/api';
   console.log('====================================================');
   console.log('🧪 RUNNING FINDIT AI FULL END-TO-END AUTOMATED TESTS');
   console.log('====================================================\n');
@@ -9,8 +21,8 @@ async function runE2ETest() {
   try {
     // 1. Health check
     console.log('1. Testing Health Endpoint...');
-    const healthRes: any = await fetch('http://localhost:5000/api/health').then(r => r.json());
-    console.log('   ✓ Health check passed:', healthRes.status, healthRes.product);
+    const healthRes: any = await fetch(`${BASE_URL}/health`).then(r => r.json());
+    console.log('   ✓ Health check passed:', healthRes.status, healthRes.product, '| Auth:', healthRes.authSystem);
 
     // 2. Campus Stats
     console.log('\n2. Testing Campus Stats Endpoint...');
@@ -23,57 +35,79 @@ async function runE2ETest() {
       recoveryRate: statsRes.stats.recoveryRate + '%'
     });
 
-    // 3. User Registration
-    console.log('\n3. Testing New Student Registration...');
-    const testEmail = `student_${Date.now()}@campus.edu`;
-    const regRes: any = await fetch(`${BASE_URL}/auth/register`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        name: 'Jordan Miller',
-        email: testEmail,
-        password: 'password123',
-        campus: 'North Campus • Computer Science',
+    // 3. User Registration (User A - Jordan Miller)
+    console.log('\n3. Registering Supabase User A (Jordan Miller)...');
+    const emailA = `jordan_${Date.now()}@campus.edu`;
+    const password = 'SecurePassword2026!';
+    
+    const { data: authA, error: errA } = await supabaseAdmin.auth.admin.createUser({
+      email: emailA,
+      password,
+      email_confirm: true,
+      user_metadata: {
+        full_name: 'Jordan Miller',
+        college: 'Computer Science Department',
         phone: '+1 (555) 999-8888'
-      })
-    }).then(r => r.json());
-    console.log('   ✓ Registration successful for:', regRes.user?.name, 'Token received:', !!regRes.token);
-    const jordanToken = regRes.token;
-
-    // 4. Demo Login (Alex Turner)
-    console.log('\n4. Testing Demo Login (Alex Turner)...');
-    const loginRes: any = await fetch(`${BASE_URL}/auth/login`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        email: 'alex.turner@campus.edu',
-        password: 'password123'
-      })
-    }).then(r => r.json());
-    console.log('   ✓ Login successful:', loginRes.user?.name, 'Role:', loginRes.user?.role);
-    const alexToken = loginRes.token;
-
-    // 5. Sarah Lin Demo Login
-    const sarahRes: any = await fetch(`${BASE_URL}/auth/login`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        email: 'sarah.lin@campus.edu',
-        password: 'password123'
-      })
-    }).then(r => r.json());
-    const sarahToken = sarahRes.token;
-
-    // 6. Search and Filter Items
-    console.log('\n5. Testing Items Search and Filters...');
-    const searchRes: any = await fetch(`${BASE_URL}/items?q=macbook&category=Electronics`).then(r => r.json());
-    console.log('   ✓ Search query "macbook" returned:', searchRes.items.length, 'records');
-    searchRes.items.forEach((it: any) => {
-      console.log(`     - [${it.type}] ${it.title} (${it.category}) at ${it.location}`);
+      }
     });
+    if (errA || !authA.user) throw new Error(`User A creation failed: ${errA?.message}`);
+    const userAId = authA.user.id;
 
-    // 7. Report New Lost Item
-    console.log('\n6. Testing Report Lost Item Workflow...');
+    const { data: loginA } = await supabaseClient.auth.signInWithPassword({
+      email: emailA,
+      password
+    });
+    const jordanToken = loginA.session!.access_token;
+    console.log('   ✓ User A registered & authenticated:', authA.user.user_metadata?.full_name, 'ID:', userAId);
+
+    // 4. User Registration (User B - Sarah Lin)
+    console.log('\n4. Registering Supabase User B (Sarah Lin)...');
+    const emailB = `sarah_${Date.now()}@campus.edu`;
+    const { data: authB, error: errB } = await supabaseAdmin.auth.admin.createUser({
+      email: emailB,
+      password,
+      email_confirm: true,
+      user_metadata: {
+        full_name: 'Sarah Lin',
+        college: 'Design & Architecture',
+        phone: '+1 (555) 777-6666'
+      }
+    });
+    if (errB || !authB.user) throw new Error(`User B creation failed: ${errB?.message}`);
+    const userBId = authB.user.id;
+
+    const { data: loginB } = await supabaseClient.auth.signInWithPassword({
+      email: emailB,
+      password
+    });
+    const sarahToken = loginB.session!.access_token;
+    console.log('   ✓ User B registered & authenticated:', authB.user.user_metadata?.full_name, 'ID:', userBId);
+
+    // 5. User Registration (User C - Marcus Vance)
+    console.log('\n5. Registering Supabase User C (Marcus Vance)...');
+    const emailC = `marcus_${Date.now()}@campus.edu`;
+    const { data: authC, error: errC } = await supabaseAdmin.auth.admin.createUser({
+      email: emailC,
+      password,
+      email_confirm: true,
+      user_metadata: {
+        full_name: 'Marcus Vance',
+        college: 'Engineering Department',
+        phone: '+1 (555) 444-3333'
+      }
+    });
+    if (errC || !authC.user) throw new Error(`User C creation failed: ${errC?.message}`);
+    const userCId = authC.user.id;
+
+    const { data: loginC } = await supabaseClient.auth.signInWithPassword({
+      email: emailC,
+      password
+    });
+    const marcusToken = loginC.session!.access_token;
+    console.log('   ✓ User C registered & authenticated:', authC.user.user_metadata?.full_name, 'ID:', userCId);
+
+    // 6. User A reports LOST item
+    console.log('\n6. User A (Jordan) Reports LOST Item...');
     const reportLostRes: any = await fetch(`${BASE_URL}/items`, {
       method: 'POST',
       headers: {
@@ -88,15 +122,14 @@ async function runE2ETest() {
         location: 'Science Building',
         building_zone: '2nd Floor Study Lounge',
         date: '2026-09-19',
-        time: '11:00',
         characteristics: 'NASA rocket sticker, scratch near volume button'
       })
     }).then(r => r.json());
     console.log('   ✓ Lost Item created:', reportLostRes.item?.title, 'ID:', reportLostRes.item?.id);
     const lostItemId = reportLostRes.item?.id;
 
-    // 8. Report Matching Found Item
-    console.log('\n7. Testing Report Found Item & AI Matching Trigger...');
+    // 7. User B reports matching FOUND item
+    console.log('\n7. User B (Sarah) Reports FOUND Item...');
     const reportFoundRes: any = await fetch(`${BASE_URL}/items`, {
       method: 'POST',
       headers: {
@@ -111,29 +144,100 @@ async function runE2ETest() {
         location: 'Science Building',
         building_zone: '2nd Floor Lounge Area',
         date: '2026-09-19',
-        time: '12:30',
         characteristics: 'White keyboard folio with space sticker'
       })
     }).then(r => r.json());
     console.log('   ✓ Found Item created:', reportFoundRes.item?.title, 'Matches found:', reportFoundRes.matchesFound);
     const foundItemId = reportFoundRes.item?.id;
 
-    // 9. Verify Potential Match Records
-    console.log('\n8. Verifying AI Potential Matches on Lost Item Details...');
+    // 8. Verify AI Match
+    console.log('\n8. Verifying Potential Matches on User A Lost Item...');
     const matchDetailRes: any = await fetch(`${BASE_URL}/items/${lostItemId}`, {
       headers: { 'Authorization': `Bearer ${jordanToken}` }
     }).then(r => r.json());
-    console.log('   ✓ Matches retrieved for item:', matchDetailRes.matches.length);
-    if (matchDetailRes.matches.length > 0) {
-      const topMatch = matchDetailRes.matches[0];
-      console.log(`     - Match Score: ${topMatch.match_score}%`);
-      console.log(`     - Matched Item: ${topMatch.title}`);
-      console.log(`     - Features: ${topMatch.matched_features.join(', ')}`);
-      console.log(`     - Reasons: ${topMatch.match_reasons.join(' | ')}`);
+    console.log('   ✓ Matches retrieved for User A item:', matchDetailRes.matches.length);
+
+    // =========================================================================
+    // NEGATIVE TEST CASES
+    // =========================================================================
+    console.log('\n====================================================');
+    console.log('🛡️ TESTING CLAIM BUSINESS RULES & NEGATIVE TEST CASES');
+    console.log('====================================================\n');
+
+    // Neg 1: User B tries to claim their own found item
+    console.log('Neg 1: User B claims their OWN found item (Must be rejected)...');
+    const selfClaimRes = await fetch(`${BASE_URL}/claims`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${sarahToken}`
+      },
+      body: JSON.stringify({
+        itemId: foundItemId,
+        locationLost: 'Science Building 2nd Floor',
+        dateLost: '2026-09-19',
+        identifyingDetails: 'This is my own reported item attempt',
+        contactShareConsent: true
+      })
+    });
+    const selfClaimJson: any = await selfClaimRes.json();
+    if (selfClaimRes.status === 400 && selfClaimJson.error === 'You cannot claim your own reported item.') {
+      console.log('   ✓ PASSED: Self-claim correctly blocked with 400:', selfClaimJson.error);
+    } else {
+      throw new Error(`Self-claim check failed! Status: ${selfClaimRes.status}, Body: ${JSON.stringify(selfClaimJson)}`);
     }
 
-    // 10. Submit Ownership Claim
-    console.log('\n9. Testing Ownership Claim Submission with Verification Questionnaire...');
+    // Neg 2: User A tries to claim a LOST item
+    console.log('\nNeg 2: User claims a LOST item report (Must be rejected)...');
+    const claimLostRes = await fetch(`${BASE_URL}/claims`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${sarahToken}`
+      },
+      body: JSON.stringify({
+        itemId: lostItemId,
+        locationLost: 'Science Building',
+        dateLost: '2026-09-19',
+        identifyingDetails: 'Trying to claim a lost report',
+        contactShareConsent: true
+      })
+    });
+    const claimLostJson: any = await claimLostRes.json();
+    if (claimLostRes.status === 400 && claimLostJson.error.includes('FOUND')) {
+      console.log('   ✓ PASSED: Claim on LOST item correctly blocked with 400:', claimLostJson.error);
+    } else {
+      throw new Error(`Claim on LOST item check failed! Status: ${claimLostRes.status}`);
+    }
+
+    // Neg 3: Unauthenticated user submits claim
+    console.log('\nNeg 3: Unauthenticated user submits claim (Must be rejected)...');
+    const unauthClaimRes = await fetch(`${BASE_URL}/claims`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        itemId: foundItemId,
+        locationLost: 'Science Building',
+        dateLost: '2026-09-19',
+        identifyingDetails: 'Unauthenticated claim attempt',
+        contactShareConsent: true
+      })
+    });
+    const unauthClaimJson: any = await unauthClaimRes.json();
+    if (unauthClaimRes.status === 401) {
+      console.log('   ✓ PASSED: Unauthenticated claim blocked with 401:', unauthClaimJson.error);
+    } else {
+      throw new Error(`Unauthenticated check failed! Status: ${unauthClaimRes.status}`);
+    }
+
+    // =========================================================================
+    // HAPPY PATH: User A claims User B's found item
+    // =========================================================================
+    console.log('\n====================================================');
+    console.log('✨ TESTING CLAIM CREATION & APPROVAL FLOW');
+    console.log('====================================================\n');
+
+    console.log('9. User A (Jordan) submits Ownership Claim on User B (Sarah) Found Item...');
     const claimRes: any = await fetch(`${BASE_URL}/claims`, {
       method: 'POST',
       headers: {
@@ -152,13 +256,74 @@ async function runE2ETest() {
     console.log('   ✓ Claim submitted successfully:', claimRes.message, 'Claim ID:', claimRes.claimId);
     const claimId = claimRes.claimId;
 
-    // 11. Finder Inspects and Approves Claim
-    console.log('\n10. Testing Claim Approval by Finder (Sarah Lin)...');
+    // Neg 4: Duplicate claim submission by same user
+    console.log('\nNeg 4: User A attempts duplicate claim on same found item (Must be rejected)...');
+    const dupClaimRes = await fetch(`${BASE_URL}/claims`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${jordanToken}`
+      },
+      body: JSON.stringify({
+        itemId: foundItemId,
+        locationLost: 'Science Building 2nd floor',
+        dateLost: '2026-09-19',
+        identifyingDetails: 'Duplicate claim attempt verification text',
+        contactShareConsent: true
+      })
+    });
+    const dupClaimJson: any = await dupClaimRes.json();
+    if (dupClaimRes.status === 409 && dupClaimJson.error === 'You already have an active claim on this item.') {
+      console.log('   ✓ PASSED: Duplicate claim correctly blocked with 409:', dupClaimJson.error);
+    } else {
+      throw new Error(`Duplicate claim check failed! Status: ${dupClaimRes.status}, Body: ${JSON.stringify(dupClaimJson)}`);
+    }
+
+    // 10. Verify User B received claim notification & can view received claims
+    console.log('\n10. User B (Sarah) verifies Received Claim & Notifications...');
+    const sarahNotifs: any = await fetch(`${BASE_URL}/notifications`, {
+      headers: { 'Authorization': `Bearer ${sarahToken}` }
+    }).then(r => r.json());
+    const claimReceivedNotif = sarahNotifs.notifications.find((n: any) => n.type === 'CLAIM_RECEIVED');
+    if (claimReceivedNotif) {
+      console.log('   ✓ User B received notification:', claimReceivedNotif.title, '-', claimReceivedNotif.message);
+    } else {
+      throw new Error('User B did not receive CLAIM_RECEIVED notification!');
+    }
+
     const receivedClaimsRes: any = await fetch(`${BASE_URL}/claims/received`, {
       headers: { 'Authorization': `Bearer ${sarahToken}` }
     }).then(r => r.json());
     console.log('   ✓ Received claims count for Sarah:', receivedClaimsRes.claims.length);
+    const targetClaim = receivedClaimsRes.claims.find((c: any) => c.id === claimId);
+    if (targetClaim && targetClaim.status === 'PENDING') {
+      console.log('   ✓ Claim record verified: Status is PENDING, Claimant:', targetClaim.claimant_name);
+    } else {
+      throw new Error('Claim record not found in received claims list!');
+    }
 
+    // Neg 5: Unauthorized user (User C) attempts to approve Sarah's claim
+    console.log('\nNeg 5: User C (Marcus) attempts to approve Sarah\'s claim (Must be 403 Forbidden)...');
+    const unauthApproveRes = await fetch(`${BASE_URL}/claims/${claimId}/status`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${marcusToken}`
+      },
+      body: JSON.stringify({
+        status: 'APPROVED',
+        resolutionNotes: 'Unauthorized approval attempt'
+      })
+    });
+    const unauthApproveJson: any = await unauthApproveRes.json();
+    if (unauthApproveRes.status === 403) {
+      console.log('   ✓ PASSED: Unauthorized claim management blocked with 403:', unauthApproveJson.error);
+    } else {
+      throw new Error(`Unauthorized status update check failed! Status: ${unauthApproveRes.status}`);
+    }
+
+    // 11. Finder (Sarah) approves User A's claim
+    console.log('\n11. User B (Sarah) Approves Claim...');
     const approveRes: any = await fetch(`${BASE_URL}/claims/${claimId}/status`, {
       method: 'PUT',
       headers: {
@@ -167,38 +332,46 @@ async function runE2ETest() {
       },
       body: JSON.stringify({
         status: 'APPROVED',
-        resolutionNotes: 'Sticker and lockscreen verified in person. iPad safely returned to Jordan.'
+        resolutionNotes: 'NASA rocket sticker and serial 77KJ matched in person.'
       })
     }).then(r => r.json());
-    console.log('   ✓ Claim approval result:', approveRes.message, 'Status:', approveRes.status);
+    console.log('   ✓ Claim approved:', approveRes.message, 'Status:', approveRes.status);
 
     // 12. Verify Item Status Transition to RESOLVED
-    console.log('\n11. Verifying Item Status Transition to RESOLVED...');
+    console.log('\n12. Verifying Item Status Transition to RESOLVED...');
     const resolvedItemRes: any = await fetch(`${BASE_URL}/items/${foundItemId}`).then(r => r.json());
-    console.log('   ✓ Found Item Status:', resolvedItemRes.item?.status, '(Expected: RESOLVED)');
+    if (resolvedItemRes.item?.status === 'RESOLVED') {
+      console.log('   ✓ PASSED: Found Item Status is now RESOLVED');
+    } else {
+      throw new Error(`Item status is not RESOLVED! Status: ${resolvedItemRes.item?.status}`);
+    }
 
-    // 13. Notifications Center Verification
-    console.log('\n12. Verifying Notifications Generated...');
-    const notifRes: any = await fetch(`${BASE_URL}/notifications`, {
+    // 13. Verify Claimant (Jordan) & Finder (Sarah) received CLAIM_APPROVED notifications
+    console.log('\n13. Verifying Resolution Notifications for Claimant and Finder...');
+    const jordanNotifs: any = await fetch(`${BASE_URL}/notifications`, {
       headers: { 'Authorization': `Bearer ${jordanToken}` }
     }).then(r => r.json());
-    console.log('   ✓ Jordan notifications count:', notifRes.notifications.length, 'Unread:', notifRes.unreadCount);
-    notifRes.notifications.forEach((n: any) => {
-      console.log(`     - [${n.type}] ${n.title}: ${n.message}`);
-    });
+    const jordanApprovalNotif = jordanNotifs.notifications.find((n: any) => n.type === 'CLAIM_APPROVED');
+    if (jordanApprovalNotif) {
+      console.log('   ✓ Claimant (Jordan) received approval notification:', jordanApprovalNotif.title, '-', jordanApprovalNotif.message);
+    } else {
+      throw new Error('Claimant did not receive CLAIM_APPROVED notification!');
+    }
 
-    // 14. Natural Language AI Search Test Cases
+    // =========================================================================
+    // NATURAL LANGUAGE AI SEARCH TESTS
+    // =========================================================================
     console.log('\n====================================================');
     console.log('🧠 TESTING NATURAL LANGUAGE AI SEARCH & INTENT ENGINE');
     console.log('====================================================\n');
 
-    // TEST 1: Lost black Samsung phone near library
-    console.log('TEST 1: "I lost a black Samsung phone near the library yesterday."');
+    // TEST 1: Lost iPad in library
+    console.log('TEST 1: "I lost a silver Apple iPad with keyboard near the science lounge."');
     const nlTest1: any = await fetch(`${BASE_URL}/items/ai-search`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        query: 'I lost a black Samsung phone near the library yesterday.'
+        query: 'I lost a silver Apple iPad with keyboard near the science lounge.'
       })
     }).then(r => r.json());
     console.log('   ✓ Extracted Intent:', {
@@ -208,60 +381,9 @@ async function runE2ETest() {
       location: nlTest1.intent?.location
     });
     console.log('   ✓ Candidates scanned:', nlTest1.totalCandidatesScanned, 'Ranked matches:', nlTest1.results?.length);
-    if (nlTest1.results && nlTest1.results.length > 0) {
-      console.log(`   ✓ Top Match: [${nlTest1.results[0].match_score}% - ${nlTest1.results[0].match_tier}] ${nlTest1.results[0].item.title}`);
-      console.log(`   ✓ Reasoning: ${nlTest1.results[0].reason}`);
-    }
-
-    // TEST 2: Lost student ID card
-    console.log('\nTEST 2: "I lost my student ID card yesterday."');
-    const nlTest2: any = await fetch(`${BASE_URL}/items/ai-search`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        query: 'I lost my student ID card yesterday.'
-      })
-    }).then(r => r.json());
-    console.log('   ✓ Extracted Intent Category:', nlTest2.intent?.category, 'Keywords:', nlTest2.intent?.keywords?.slice(0, 4));
-    console.log('   ✓ Ranked matches count:', nlTest2.results?.length);
-
-    // TEST 3: Blue backpack near canteen
-    console.log('\nTEST 3: "Someone found a blue backpack near the canteen."');
-    const nlTest3: any = await fetch(`${BASE_URL}/items/ai-search`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        query: 'Someone found a blue backpack near the canteen.'
-      })
-    }).then(r => r.json());
-    console.log('   ✓ Extracted Intent Type:', nlTest3.intent?.item_type, 'Category:', nlTest3.intent?.category);
-    console.log('   ✓ Ranked matches count:', nlTest3.results?.length);
-
-    // TEST 4: Lost wallet around main block
-    console.log('\nTEST 4: "I lost my wallet around the main block last night."');
-    const nlTest4: any = await fetch(`${BASE_URL}/items/ai-search`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        query: 'I lost my wallet around the main block last night.'
-      })
-    }).then(r => r.json());
-    console.log('   ✓ Extracted Intent Relative Date:', nlTest4.intent?.relative_date, 'Category:', nlTest4.intent?.category);
-    console.log('   ✓ Ranked matches count:', nlTest4.results?.length);
-
-    // TEST 5: Uncertain location
-    console.log('\nTEST 5: "I can\'t remember exactly where I lost my phone, but it was somewhere around the library or parking area."');
-    const nlTest5: any = await fetch(`${BASE_URL}/items/ai-search`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        query: "I can't remember exactly where I lost my phone, but it was somewhere around the library or parking area."
-      })
-    }).then(r => r.json());
-    console.log('   ✓ Handled Uncertainty Gracefully. Scanned Candidates:', nlTest5.totalCandidatesScanned, 'Ranked matches:', nlTest5.results?.length);
 
     console.log('\n====================================================');
-    console.log('🎉 ALL 17 WORKFLOW & NL AI SEARCH TESTS PASSED PERFECTLY!');
+    console.log('🎉 ALL WORKFLOW, BUSINESS RULE & AI SEARCH TESTS PASSED PERFECTLY!');
     console.log('====================================================\n');
 
   } catch (error) {

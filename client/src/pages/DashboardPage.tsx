@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.js';
 import { api } from '../services/api.js';
-import { Item, CampusStats, PotentialMatch } from '../types/index.js';
+import { Item, PotentialMatch } from '../types/index.js';
 import { ItemCard } from '../components/ItemCard.js';
 import { AIMatchCard } from '../components/AIMatchCard.js';
 import { ClaimModal } from '../components/ClaimModal.js';
@@ -11,16 +11,26 @@ import {
   Sparkles, 
   PlusCircle, 
   Search, 
-  FileText, 
   ArrowRight, 
   Layers, 
   TrendingUp,
   Inbox
 } from 'lucide-react';
 
+interface PersonalDashboardStats {
+  itemsLost: number;
+  itemsFound: number;
+  totalItems: number;
+  resolvedItems: number;
+  activeClaims: number;
+  potentialMatches: number;
+  unreadNotifications: number;
+  recoveryRate: number;
+}
+
 export function DashboardPage() {
   const { user } = useAuth();
-  const [stats, setStats] = useState<CampusStats | null>(null);
+  const [stats, setStats] = useState<PersonalDashboardStats | null>(null);
   const [myItems, setMyItems] = useState<Item[]>([]);
   const [recentMatches, setRecentMatches] = useState<PotentialMatch[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -37,17 +47,35 @@ export function DashboardPage() {
     if (!user) return;
     setIsLoading(true);
     try {
-      const statsRes = await api.getCampusStats();
-      if (statsRes.stats) setStats(statsRes.stats);
+      // 1. Fetch authenticated user's personal stats
+      const userStatsRes = await api.getUserStats();
+      if (userStatsRes.stats) {
+        setStats(userStatsRes.stats);
+      } else {
+        setStats({
+          itemsLost: 0,
+          itemsFound: 0,
+          totalItems: 0,
+          resolvedItems: 0,
+          activeClaims: 0,
+          potentialMatches: 0,
+          unreadNotifications: 0,
+          recoveryRate: 0
+        });
+      }
 
+      // 2. Fetch authenticated user's reported items
       const myItemsRes = await api.getItems({ userId: user.id });
-      setMyItems(myItemsRes.items || []);
+      const userReportedItems = myItemsRes.items || [];
+      setMyItems(userReportedItems);
 
+      // 3. Fetch recent public campus activity
       const recentRes = await api.getItems({ limit: 6 });
       setRecentReports(recentRes.items || []);
 
+      // 4. Fetch potential matches belonging strictly to the user's reported items
       const matchesGathered: PotentialMatch[] = [];
-      for (const item of (myItemsRes.items || []).slice(0, 4)) {
+      for (const item of userReportedItems.slice(0, 6)) {
         try {
           const detailRes = await api.getItemById(item.id);
           if (detailRes.matches && detailRes.matches.length > 0) {
@@ -132,14 +160,14 @@ export function DashboardPage() {
         </div>
       </div>
 
-      {/* 3D Depth Statistics Row */}
+      {/* Personalized Statistics Row (Isolated to authenticated user's data) */}
       {isLoading ? (
         <StatsSkeleton />
       ) : stats ? (
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <div className="p-5 rounded-2xl bg-white border border-[#E3ECE6] shadow-[0_8px_24px_-4px_rgba(22,138,74,0.06)] flex flex-col justify-between">
             <div className="flex items-center justify-between text-[#66756C] text-xs font-bold">
-              <span>Lost Items</span>
+              <span>My Lost Items</span>
               <span className="w-2 h-2 rounded-full bg-[#E11D48]"></span>
             </div>
             <div className="text-3xl font-extrabold text-[#102018] mt-2">{stats.itemsLost}</div>
@@ -148,11 +176,11 @@ export function DashboardPage() {
 
           <div className="p-5 rounded-2xl bg-white border border-[#E3ECE6] shadow-[0_8px_24px_-4px_rgba(22,138,74,0.06)] flex flex-col justify-between">
             <div className="flex items-center justify-between text-[#66756C] text-xs font-bold">
-              <span>Found Items</span>
+              <span>My Found Items</span>
               <span className="w-2 h-2 rounded-full bg-[#35B86B]"></span>
             </div>
             <div className="text-3xl font-extrabold text-[#102018] mt-2">{stats.itemsFound}</div>
-            <div className="text-[11px] text-[#66756C] font-medium mt-1">Logged in directory</div>
+            <div className="text-[11px] text-[#66756C] font-medium mt-1">Logged by you</div>
           </div>
 
           <div className="p-5 rounded-2xl bg-gradient-to-b from-white to-[#EEF8F1] border border-[#D5ECD9] shadow-[0_8px_24px_-4px_rgba(22,138,74,0.08)] flex flex-col justify-between">
@@ -161,7 +189,7 @@ export function DashboardPage() {
               <Sparkles className="w-4 h-4 text-[#35B86B]" />
             </div>
             <div className="text-3xl font-extrabold text-[#168A4A] mt-2">{stats.potentialMatches}</div>
-            <div className="text-[11px] text-[#168A4A] font-semibold mt-1">AI suggestions</div>
+            <div className="text-[11px] text-[#168A4A] font-semibold mt-1">On your reports</div>
           </div>
 
           <div className="p-5 rounded-2xl bg-white border border-[#E3ECE6] shadow-[0_8px_24px_-4px_rgba(22,138,74,0.06)] flex flex-col justify-between">
@@ -170,7 +198,7 @@ export function DashboardPage() {
               <TrendingUp className="w-4 h-4 text-[#35B86B]" />
             </div>
             <div className="text-3xl font-extrabold text-[#35B86B] mt-2">{stats.resolvedItems}</div>
-            <div className="text-[11px] text-[#66756C] font-medium mt-1">{stats.recoveryRate}% success rate</div>
+            <div className="text-[11px] text-[#66756C] font-medium mt-1">Completed recoveries</div>
           </div>
         </div>
       ) : null}

@@ -3,9 +3,9 @@ import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
 import crypto from 'crypto';
-import { DatabaseService } from '../db/database.js';
+import { supabaseDb, ItemRecord } from '../db/supabaseDb.js';
 import { AuthenticatedRequest, authenticateToken, optionalAuthenticateToken } from '../middleware/auth.js';
-import { aiMatchingService, ItemRecord } from '../services/aiMatcher.js';
+import { aiMatchingService } from '../services/aiMatcher.js';
 
 const uploadDir = path.resolve(process.cwd(), 'uploads');
 if (!fs.existsSync(uploadDir)) {
@@ -37,7 +37,7 @@ const upload = multer({
   }
 });
 
-export function createItemsRouter(db: DatabaseService): Router {
+export function createItemsRouter(): Router {
   const router = Router();
 
   // Natural Language AI Search
@@ -54,7 +54,7 @@ export function createItemsRouter(db: DatabaseService): Router {
       const intent = await aiMatchingService.extractQueryIntent(cleanQuery, imageBase64);
 
       // 2. Stage 2: Retrieve Candidates from Database using multi-signal retrieval
-      const candidates = await aiMatchingService.findCandidatesForIntent(db, intent, type);
+      const candidates = await aiMatchingService.findCandidatesForIntent(intent, type);
 
       // 3. Stage 3 & 4: Deep Match Reasoning with Gemini / Fallback
       const results = await aiMatchingService.evaluateNaturalLanguageMatches(cleanQuery, intent, candidates);
@@ -72,7 +72,7 @@ export function createItemsRouter(db: DatabaseService): Router {
   });
 
   // List & Search items with advanced filters
-  router.get('/', optionalAuthenticateToken, (req: AuthenticatedRequest, res: Response) => {
+  router.get('/', optionalAuthenticateToken, async (req: AuthenticatedRequest, res: Response) => {
     try {
       const {
         q,
@@ -86,76 +86,21 @@ export function createItemsRouter(db: DatabaseService): Router {
         offset = 0
       } = req.query;
 
-      let conditions: string[] = [];
-      let params: any[] = [];
-
-      if (type && type !== 'ALL') {
-        conditions.push('i.type = ?');
-        params.push(String(type).toUpperCase());
-      }
-
-      if (category && category !== 'ALL') {
-        conditions.push('i.category = ?');
-        params.push(String(category));
-      }
-
-      if (location && location !== 'ALL') {
-        conditions.push('(i.location LIKE ? OR i.building_zone LIKE ?)');
-        params.push(`%${location}%`, `%${location}%`);
-      }
-
-      if (status && status !== 'ALL') {
-        conditions.push('i.status = ?');
-        params.push(String(status).toUpperCase());
-      }
-
-      if (userId) {
-        conditions.push('i.user_id = ?');
-        params.push(String(userId));
-      }
-
-      if (q && String(q).trim().length > 0) {
-        const searchTerm = `%${String(q).trim()}%`;
-        conditions.push('(i.title LIKE ? OR i.description LIKE ? OR i.category LIKE ? OR i.location LIKE ? OR i.characteristics LIKE ?)');
-        params.push(searchTerm, searchTerm, searchTerm, searchTerm, searchTerm);
-      }
-
-      const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
-
-      let orderBy = 'ORDER BY i.created_at DESC';
-      if (sort === 'oldest') {
-        orderBy = 'ORDER BY i.created_at ASC';
-      } else if (sort === 'date_desc') {
-        orderBy = 'ORDER BY i.date DESC, i.created_at DESC';
-      }
-
-      const sql = `
-        SELECT 
-          i.*,
-          u.name as reporter_name,
-          u.campus as reporter_campus,
-          u.avatar as reporter_avatar,
-          (SELECT COUNT(*) FROM potential_matches pm WHERE pm.lost_item_id = i.id OR pm.found_item_id = i.id) as potential_matches_count,
-          (SELECT MAX(match_score) FROM potential_matches pm WHERE pm.lost_item_id = i.id OR pm.found_item_id = i.id) as top_match_score,
-          (SELECT COUNT(*) FROM claims c WHERE c.item_id = i.id) as claims_count
-        FROM items i
-        JOIN users u ON i.user_id = u.id
-        ${whereClause}
-        ${orderBy}
-        LIMIT ? OFFSET ?
-      `;
-
-      params.push(Number(limit), Number(offset));
-      const items = db.query(sql, params);
-
-      // Total count query
-      const countSql = `SELECT COUNT(*) as total FROM items i ${whereClause}`;
-      const countParams = params.slice(0, -2);
-      const totalResult = db.queryOne<{ total: number }>(countSql, countParams);
+      const { items, total } = await supabaseDb.getItems({
+        q: q ? String(q) : undefined,
+        type: type ? String(type) : undefined,
+        category: category ? String(category) : undefined,
+        location: location ? String(location) : undefined,
+        status: status ? String(status) : undefined,
+        sort: sort ? String(sort) : undefined,
+        userId: userId ? String(userId) : undefined,
+        limit: Number(limit),
+        offset: Number(offset)
+      });
 
       return res.json({
         items,
-        total: totalResult?.total || items.length,
+        total,
         limit: Number(limit),
         offset: Number(offset)
       });
@@ -166,96 +111,33 @@ export function createItemsRouter(db: DatabaseService): Router {
   });
 
   // Get item by ID
-  router.get('/:id', optionalAuthenticateToken, (req: AuthenticatedRequest, res: Response) => {
+  router.get('/:id', optionalAuthenticateToken, async (req: AuthenticatedRequest, res: Response) => {
     try {
       const { id } = req.params;
-
-      const item = db.queryOne<any>(
-        `SELECT 
-          i.*,
-          u.name as reporter_name,
-          u.campus as reporter_campus,
-          u.avatar as reporter_avatar,
-          (SELECT COUNT(*) FROM potential_matches pm WHERE pm.lost_item_id = i.id OR pm.found_item_id = i.id) as potential_matches_count,
-          (SELECT MAX(match_score) FROM potential_matches pm WHERE pm.lost_item_id = i.id OR pm.found_item_id = i.id) as top_match_score
-        FROM items i
-        JOIN users u ON i.user_id = u.id
-        WHERE i.id = ?`,
-        [id]
-      );
+      const item = await supabaseDb.getItemById(id);
 
       if (!item) {
         return res.status(404).json({ error: 'Item not found.' });
       }
 
-      const images = db.query<{ id: string; image_url: string }>('SELECT id, image_url FROM item_images WHERE item_id = ?', [id]);
-
-      // Check if current user is the owner
       const isOwner = req.user?.id === item.user_id;
 
-      // Fetch potential matches for this item
-      const isLost = item.type === 'LOST';
-      const matchesSql = isLost
-        ? `SELECT 
-             pm.id as match_id,
-             pm.match_score,
-             pm.match_reasons,
-             pm.matched_features,
-             pm.ai_evaluated,
-             pm.status as match_status,
-             other.*,
-             u.name as reporter_name,
-             u.campus as reporter_campus
-           FROM potential_matches pm
-           JOIN items other ON pm.found_item_id = other.id
-           JOIN users u ON other.user_id = u.id
-           WHERE pm.lost_item_id = ?
-           ORDER BY pm.match_score DESC`
-        : `SELECT 
-             pm.id as match_id,
-             pm.match_score,
-             pm.match_reasons,
-             pm.matched_features,
-             pm.ai_evaluated,
-             pm.status as match_status,
-             other.*,
-             u.name as reporter_name,
-             u.campus as reporter_campus
-           FROM potential_matches pm
-           JOIN items other ON pm.lost_item_id = other.id
-           JOIN users u ON other.user_id = u.id
-           WHERE pm.found_item_id = ?
-           ORDER BY pm.match_score DESC`;
+      // Potential matches for this item
+      const matches = await supabaseDb.getPotentialMatchesForItem(id, item.type);
 
-      const matches = db.query<any>(matchesSql, [id]).map(m => ({
-        ...m,
-        match_reasons: JSON.parse(m.match_reasons || '[]'),
-        matched_features: JSON.parse(m.matched_features || '[]')
-      }));
-
-      // Fetch claims on this item if owner, or check if logged in user has a claim
+      // Fetch user claim or all claims if owner
       let userClaim: any = null;
       let allClaims: any[] = [];
 
       if (req.user) {
-        userClaim = db.queryOne('SELECT * FROM claims WHERE item_id = ? AND claimant_id = ?', [id, req.user.id]);
+        userClaim = await supabaseDb.getUserClaimForItem(id, req.user.id);
         if (isOwner) {
-          allClaims = db.query(
-            `SELECT c.*, u.name as claimant_name, u.email as claimant_email, u.campus as claimant_campus, u.avatar as claimant_avatar
-             FROM claims c
-             JOIN users u ON c.claimant_id = u.id
-             WHERE c.item_id = ?
-             ORDER BY c.created_at DESC`,
-            [id]
-          );
+          allClaims = await supabaseDb.getClaimsForItem(id);
         }
       }
 
       return res.json({
-        item: {
-          ...item,
-          images
-        },
+        item,
         isOwner,
         matches,
         userClaim,
@@ -264,6 +146,38 @@ export function createItemsRouter(db: DatabaseService): Router {
     } catch (err: any) {
       console.error('Fetch item details error:', err);
       return res.status(500).json({ error: 'Failed to retrieve item details.' });
+    }
+  });
+
+  // Real-time Multimodal Image Verification & Cross-Validation
+  router.post('/verify-image', optionalAuthenticateToken, upload.single('image'), async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const { title = '', description = '', category = '', imageUrl, imageBase64 } = req.body;
+
+      let filePath: string | undefined;
+      if (req.file) {
+        filePath = path.resolve(uploadDir, req.file.filename);
+      }
+
+      const hintText = `${title} ${description} ${category} ${req.file?.originalname || ''}`;
+      const imageAnalysis = await aiMatchingService.analyzeImage({
+        filePath,
+        url: imageUrl,
+        base64: imageBase64,
+        hintText
+      });
+
+      const normText = aiMatchingService.normalizeItem(description, title, category);
+      const consistency = aiMatchingService.evaluateTextAndImageConsistency(normText, imageAnalysis);
+
+      return res.json({
+        imageAnalysis,
+        consistency,
+        normText
+      });
+    } catch (err: any) {
+      console.error('Verify image error:', err);
+      return res.status(500).json({ error: 'Failed to complete image verification.' });
     }
   });
 
@@ -280,7 +194,8 @@ export function createItemsRouter(db: DatabaseService): Router {
         date,
         time,
         characteristics,
-        imageUrl
+        imageUrl,
+        imageBase64
       } = req.body;
 
       if (!type || !['LOST', 'FOUND'].includes(type.toUpperCase())) {
@@ -294,47 +209,58 @@ export function createItemsRouter(db: DatabaseService): Router {
       const itemId = crypto.randomUUID();
       const userId = req.user!.id;
 
+      // Ensure profile exists
+      let profile = await supabaseDb.getProfile(userId);
+      if (!profile) {
+        await supabaseDb.upsertProfile({
+          id: userId,
+          full_name: req.user!.name,
+          email: req.user!.email,
+          college: req.user!.campus,
+          avatar_url: req.user!.avatar,
+          phone: req.user!.phone
+        });
+      }
+
       // Determine primary image
       let primaryImage = '';
+      let uploadedFilePath: string | undefined;
+
       if (req.file) {
         primaryImage = `/uploads/${req.file.filename}`;
+        uploadedFilePath = path.resolve(uploadDir, req.file.filename);
       } else if (imageUrl && typeof imageUrl === 'string' && imageUrl.trim().length > 0) {
         primaryImage = imageUrl.trim();
       } else {
-        // Fallback category visual
         primaryImage = getCategoryPlaceholder(category);
       }
 
-      db.run(
-        `INSERT INTO items (
-          id, user_id, type, title, description, category, location, 
-          building_zone, date, time, status, primary_image, characteristics
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE', ?, ?)`,
-        [
-          itemId,
-          userId,
-          type.toUpperCase(),
-          title.trim(),
-          description.trim(),
-          category.trim(),
-          location.trim(),
-          building_zone?.trim() || null,
-          date.trim(),
-          time?.trim() || null,
-          primaryImage,
-          characteristics?.trim() || null
-        ]
-      );
+      // Perform server-side Multimodal AI Vision Analysis
+      let imageAnalysis: any = null;
+      let consistencyResult: any = {
+        consistency_level: 'CONSISTENT',
+        object_compatible: true,
+        has_mismatch: false
+      };
 
-      // Also record image in item_images table
-      if (primaryImage) {
-        db.run(
-          `INSERT INTO item_images (id, item_id, image_url) VALUES (?, ?, ?)`,
-          [crypto.randomUUID(), itemId, primaryImage]
-        );
+      if (uploadedFilePath || (imageUrl && typeof imageUrl === 'string' && imageUrl.trim().length > 0) || imageBase64) {
+        try {
+          const hintText = `${title} ${description} ${category} ${req.file?.originalname || ''}`;
+          imageAnalysis = await aiMatchingService.analyzeImage({
+            filePath: uploadedFilePath,
+            url: imageUrl,
+            base64: imageBase64,
+            hintText
+          });
+
+          const normText = aiMatchingService.normalizeItem(description, title, category);
+          consistencyResult = aiMatchingService.evaluateTextAndImageConsistency(normText, imageAnalysis);
+        } catch (visionErr) {
+          console.warn('Image analysis failed, proceeding with fallback:', visionErr);
+        }
       }
 
-      const createdItem: ItemRecord = {
+      const createdItem: ItemRecord = await supabaseDb.createItem({
         id: itemId,
         user_id: userId,
         type: type.toUpperCase() as 'LOST' | 'FOUND',
@@ -347,24 +273,37 @@ export function createItemsRouter(db: DatabaseService): Router {
         time: time?.trim() || undefined,
         status: 'ACTIVE',
         primary_image: primaryImage,
-        characteristics: characteristics?.trim() || undefined
-      };
+        characteristics: characteristics?.trim() || undefined,
+        ai_object_type: imageAnalysis?.object_type,
+        ai_category: imageAnalysis?.category,
+        ai_subcategory: imageAnalysis?.subcategory,
+        ai_brand: imageAnalysis?.brand,
+        ai_model: imageAnalysis?.model,
+        ai_color: imageAnalysis?.color,
+        ai_features: imageAnalysis?.visible_features || [],
+        ai_image_confidence: imageAnalysis?.confidence,
+        ai_text_image_consistency: consistencyResult.consistency_level,
+        ai_analysis_version: imageAnalysis?.analysis_model,
+        ai_analyzed_at: imageAnalysis?.analyzed_at,
+        ai_image_analysis: imageAnalysis
+      });
 
       // Run AI potential matching pipeline
       let matchesCount = 0;
       try {
-        matchesCount = await aiMatchingService.findMatchesForItem(db, createdItem);
+        matchesCount = await aiMatchingService.findMatchesForItem(createdItem);
       } catch (matchErr) {
         console.warn('Matching pipeline error:', matchErr);
       }
 
-      // Fetch fresh item data
-      const finalItem = db.queryOne('SELECT * FROM items WHERE id = ?', [itemId]);
+      const finalItem = await supabaseDb.getItemById(itemId);
 
       return res.status(201).json({
         message: `${type === 'LOST' ? 'Lost' : 'Found'} item reported successfully.`,
-        item: finalItem,
-        matchesFound: matchesCount
+        item: finalItem || createdItem,
+        matchesFound: matchesCount,
+        consistency: consistencyResult,
+        warning: consistencyResult.has_mismatch ? consistencyResult.warning_message : undefined
       });
     } catch (err: any) {
       console.error('Create item error:', err);
@@ -373,12 +312,12 @@ export function createItemsRouter(db: DatabaseService): Router {
   });
 
   // Update item
-  router.put('/:id', authenticateToken, (req: AuthenticatedRequest, res: Response) => {
+  router.put('/:id', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
     try {
       const { id } = req.params;
       const { title, description, category, location, building_zone, date, time, status, characteristics } = req.body;
 
-      const item = db.queryOne<any>('SELECT * FROM items WHERE id = ?', [id]);
+      const item = await supabaseDb.getItemById(id);
       if (!item) {
         return res.status(404).json({ error: 'Item not found.' });
       }
@@ -387,23 +326,18 @@ export function createItemsRouter(db: DatabaseService): Router {
         return res.status(403).json({ error: 'You are not authorized to update this item.' });
       }
 
-      db.run(
-        `UPDATE items 
-         SET title = COALESCE(?, title),
-             description = COALESCE(?, description),
-             category = COALESCE(?, category),
-             location = COALESCE(?, location),
-             building_zone = COALESCE(?, building_zone),
-             date = COALESCE(?, date),
-             time = COALESCE(?, time),
-             status = COALESCE(?, status),
-             characteristics = COALESCE(?, characteristics),
-             updated_at = CURRENT_TIMESTAMP
-         WHERE id = ?`,
-        [title || null, description || null, category || null, location || null, building_zone || null, date || null, time || null, status || null, characteristics || null, id]
-      );
+      const updated = await supabaseDb.updateItem(id, req.user!.id, {
+        title,
+        description,
+        category,
+        location,
+        building_zone,
+        date,
+        time,
+        status,
+        characteristics
+      });
 
-      const updated = db.queryOne('SELECT * FROM items WHERE id = ?', [id]);
       return res.json({ message: 'Item updated successfully', item: updated });
     } catch (err: any) {
       console.error('Update item error:', err);
@@ -412,10 +346,10 @@ export function createItemsRouter(db: DatabaseService): Router {
   });
 
   // Delete item
-  router.delete('/:id', authenticateToken, (req: AuthenticatedRequest, res: Response) => {
+  router.delete('/:id', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
     try {
       const { id } = req.params;
-      const item = db.queryOne<any>('SELECT * FROM items WHERE id = ?', [id]);
+      const item = await supabaseDb.getItemById(id);
       if (!item) {
         return res.status(404).json({ error: 'Item not found.' });
       }
@@ -424,7 +358,11 @@ export function createItemsRouter(db: DatabaseService): Router {
         return res.status(403).json({ error: 'You are not authorized to delete this item.' });
       }
 
-      db.run('DELETE FROM items WHERE id = ?', [id]);
+      const deleted = await supabaseDb.deleteItem(id, req.user!.id);
+      if (!deleted) {
+        return res.status(403).json({ error: 'You are not authorized to delete this item.' });
+      }
+
       return res.json({ message: 'Item deleted successfully' });
     } catch (err: any) {
       console.error('Delete item error:', err);
@@ -436,12 +374,12 @@ export function createItemsRouter(db: DatabaseService): Router {
   router.post('/:id/rematch', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
     try {
       const { id } = req.params;
-      const item = db.queryOne<any>('SELECT * FROM items WHERE id = ?', [id]);
+      const item = await supabaseDb.getItemById(id);
       if (!item) {
         return res.status(404).json({ error: 'Item not found.' });
       }
 
-      const matchesCount = await aiMatchingService.findMatchesForItem(db, item);
+      const matchesCount = await aiMatchingService.findMatchesForItem(item);
       return res.json({ message: 'AI matching executed', matchesFound: matchesCount });
     } catch (err: any) {
       console.error('Rematch error:', err);

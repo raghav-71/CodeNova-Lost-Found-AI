@@ -8,6 +8,7 @@ import { StatusBadge, TypeBadge } from '../components/StatusBadge.js';
 import { StatusTimeline } from '../components/StatusTimeline.js';
 import { AIMatchCard } from '../components/AIMatchCard.js';
 import { ClaimModal } from '../components/ClaimModal.js';
+import { MultimodalAnalysisBadge } from '../components/MultimodalAnalysisBadge.js';
 import { DetailSkeleton } from '../components/SkeletonLoader.js';
 import confetti from 'canvas-confetti';
 import { 
@@ -204,6 +205,9 @@ export function ItemDetailsPage() {
               <StatusBadge status={item.status} size="md" />
             </div>
           </div>
+
+          {/* Multimodal AI Image Verification Card */}
+          <MultimodalAnalysisBadge item={item} />
 
           {/* Details Card */}
           <div className="rounded-3xl bg-white border border-[#E3ECE6] p-6 sm:p-8 space-y-6 shadow-[0_10px_28px_-4px_rgba(22,138,74,0.06)]">

@@ -1,0 +1,923 @@
+import crypto from 'crypto';
+import { supabaseAdmin, isSupabaseServerConfigured } from '../services/supabase.js';
+
+export interface ProfileRecord {
+  id: string;
+  full_name: string;
+  email: string;
+  avatar_url: string;
+  college: string;
+  phone?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface ItemRecord {
+  id: string;
+  user_id: string;
+  type: 'LOST' | 'FOUND';
+  title: string;
+  description: string;
+  category: string;
+  location: string;
+  building_zone?: string;
+  latitude?: number;
+  longitude?: number;
+  date: string;
+  time?: string;
+  status: 'ACTIVE' | 'MATCH_FOUND' | 'CLAIM_PENDING' | 'RESOLVED' | 'CLOSED';
+  primary_image?: string;
+  characteristics?: string;
+  // Multimodal AI Verification & Image Analysis Fields
+  ai_object_type?: string;
+  ai_category?: string;
+  ai_subcategory?: string;
+  ai_brand?: string;
+  ai_model?: string;
+  ai_color?: string;
+  ai_features?: string[];
+  ai_image_confidence?: number;
+  ai_text_image_consistency?: 'CONSISTENT' | 'MINOR_MISMATCH' | 'MAJOR_MISMATCH' | 'UNKNOWN_IMAGE' | string;
+  ai_analysis_version?: string;
+  ai_analyzed_at?: string;
+  ai_image_analysis?: any;
+  created_at?: string;
+  updated_at?: string;
+  reporter_name?: string;
+  reporter_campus?: string;
+  reporter_avatar?: string;
+  potential_matches_count?: number;
+  top_match_score?: number;
+  claims_count?: number;
+  images?: { id: string; image_url: string }[];
+}
+
+export interface ClaimRecord {
+  id: string;
+  item_id: string;
+  claimant_id: string;
+  location_lost: string;
+  date_lost: string;
+  identifying_details: string;
+  proof_notes?: string;
+  contact_share_consent: boolean | number;
+  resolution_notes?: string;
+  status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELLED';
+  created_at?: string;
+  updated_at?: string;
+  item_title?: string;
+  item_type?: 'LOST' | 'FOUND';
+  item_category?: string;
+  item_location?: string;
+  item_image?: string;
+  item_owner_id?: string;
+  reporter_name?: string;
+  reporter_campus?: string;
+  claimant_name?: string;
+  claimant_email?: string;
+  claimant_campus?: string;
+  claimant_avatar?: string;
+}
+
+export interface NotificationRecord {
+  id: string;
+  user_id: string;
+  type: string;
+  title: string;
+  message: string;
+  link_url?: string;
+  related_item_id?: string;
+  related_claim_id?: string;
+  is_read: boolean | number;
+  created_at?: string;
+}
+
+export interface PotentialMatchRecord {
+  id: string;
+  lost_item_id: string;
+  found_item_id: string;
+  match_score: number;
+  match_reasons: string[];
+  matched_features: string[];
+  ai_evaluated: boolean | number;
+  status: string;
+  created_at?: string;
+}
+
+class SupabaseDatabaseService {
+  // In-memory isolated store fallback (synchronized with Supabase auth.users.id)
+  private memoryProfiles: Map<string, ProfileRecord> = new Map();
+  private memoryItems: Map<string, ItemRecord> = new Map();
+  private memoryItemImages: Map<string, { id: string; item_id: string; image_url: string }> = new Map();
+  private memoryClaims: Map<string, ClaimRecord> = new Map();
+  private memoryNotifications: Map<string, NotificationRecord> = new Map();
+  private memoryMatches: Map<string, PotentialMatchRecord> = new Map();
+
+  private isPostgrestReady: boolean = false;
+
+  constructor() {
+    this.checkPostgrestAvailability();
+  }
+
+  private async checkPostgrestAvailability() {
+    if (!isSupabaseServerConfigured) return;
+    try {
+      const { error } = await supabaseAdmin.from('profiles').select('id').limit(1);
+      this.isPostgrestReady = !error;
+    } catch {
+      this.isPostgrestReady = false;
+    }
+  }
+
+  // --------------------------------------------------------------------------
+  // PROFILES
+  // --------------------------------------------------------------------------
+  async getProfile(userId: string): Promise<ProfileRecord | null> {
+    if (this.isPostgrestReady) {
+      try {
+        const { data, error } = await supabaseAdmin
+          .from('profiles')
+          .select('*')
+          .eq('id', userId)
+          .maybeSingle();
+        if (!error && data) return data as ProfileRecord;
+      } catch {
+        // fallback
+      }
+    }
+    return this.memoryProfiles.get(userId) || null;
+  }
+
+  async upsertProfile(profile: {
+    id: string;
+    full_name: string;
+    email: string;
+    avatar_url?: string;
+    college?: string;
+    phone?: string;
+  }): Promise<ProfileRecord> {
+    const record: ProfileRecord = {
+      id: profile.id,
+      full_name: profile.full_name,
+      email: profile.email,
+      avatar_url: profile.avatar_url || `https://api.dicebear.com/7.x/bottts/svg?seed=${profile.id}`,
+      college: profile.college || 'Central Campus',
+      phone: profile.phone || '',
+      updated_at: new Date().toISOString()
+    };
+
+    if (this.isPostgrestReady) {
+      try {
+        const { data, error } = await supabaseAdmin
+          .from('profiles')
+          .upsert(record)
+          .select()
+          .single();
+        if (!error && data) return data as ProfileRecord;
+      } catch {
+        // fallback
+      }
+    }
+
+    const existing = this.memoryProfiles.get(profile.id);
+    const saved: ProfileRecord = {
+      ...record,
+      created_at: existing?.created_at || new Date().toISOString()
+    };
+    this.memoryProfiles.set(profile.id, saved);
+    return saved;
+  }
+
+  async updateProfile(userId: string, updates: {
+    name?: string;
+    campus?: string;
+    phone?: string;
+    avatar?: string;
+  }): Promise<ProfileRecord | null> {
+    const existing = await this.getProfile(userId);
+    if (!existing) return null;
+
+    const updated: ProfileRecord = {
+      ...existing,
+      full_name: updates.name !== undefined ? updates.name : existing.full_name,
+      college: updates.campus !== undefined ? updates.campus : existing.college,
+      phone: updates.phone !== undefined ? updates.phone : existing.phone,
+      avatar_url: updates.avatar !== undefined ? updates.avatar : existing.avatar_url,
+      updated_at: new Date().toISOString()
+    };
+
+    if (this.isPostgrestReady) {
+      try {
+        const { data, error } = await supabaseAdmin
+          .from('profiles')
+          .update(updated)
+          .eq('id', userId)
+          .select()
+          .single();
+        if (!error && data) return data as ProfileRecord;
+      } catch {
+        // fallback
+      }
+    }
+
+    this.memoryProfiles.set(userId, updated);
+    return updated;
+  }
+
+  // --------------------------------------------------------------------------
+  // ITEMS
+  // --------------------------------------------------------------------------
+  async getItems(options: {
+    q?: string;
+    type?: string;
+    category?: string;
+    location?: string;
+    status?: string;
+    sort?: string;
+    userId?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<{ items: ItemRecord[]; total: number }> {
+    const limit = options.limit || 50;
+    const offset = options.offset || 0;
+
+    let itemsList: ItemRecord[] = Array.from(this.memoryItems.values());
+
+    if (this.isPostgrestReady) {
+      try {
+        let query = supabaseAdmin
+          .from('items')
+          .select('*, profiles:user_id(full_name, college, avatar_url)', { count: 'exact' });
+
+        if (options.type && options.type !== 'ALL') query = query.eq('type', options.type.toUpperCase());
+        if (options.category && options.category !== 'ALL') query = query.eq('category', options.category);
+        if (options.status && options.status !== 'ALL') query = query.eq('status', options.status.toUpperCase());
+        if (options.userId) query = query.eq('user_id', options.userId);
+        if (options.location && options.location !== 'ALL') query = query.ilike('location', `%${options.location}%`);
+        if (options.q && options.q.trim()) {
+          query = query.or(`title.ilike.%${options.q.trim()}%,description.ilike.%${options.q.trim()}%,category.ilike.%${options.q.trim()}%,location.ilike.%${options.q.trim()}%`);
+        }
+
+        if (options.sort === 'oldest') {
+          query = query.order('created_at', { ascending: true });
+        } else {
+          query = query.order('created_at', { ascending: false });
+        }
+
+        query = query.range(offset, offset + limit - 1);
+
+        const { data, error, count } = await query;
+        if (!error && data) {
+          const mapped = data.map((item: any) => ({
+            ...item,
+            reporter_name: item.profiles?.full_name || 'Campus Member',
+            reporter_campus: item.profiles?.college || 'Central Campus',
+            reporter_avatar: item.profiles?.avatar_url || '',
+            potential_matches_count: this.countPotentialMatchesForItem(item.id),
+            claims_count: this.countClaimsForItem(item.id)
+          }));
+          return { items: mapped, total: count || mapped.length };
+        }
+      } catch {
+        // fallback
+      }
+    }
+
+    // In-memory filtering & sorting
+    if (options.type && options.type !== 'ALL') {
+      itemsList = itemsList.filter(i => i.type === options.type?.toUpperCase());
+    }
+    if (options.category && options.category !== 'ALL') {
+      itemsList = itemsList.filter(i => i.category === options.category);
+    }
+    if (options.status && options.status !== 'ALL') {
+      itemsList = itemsList.filter(i => i.status === options.status?.toUpperCase());
+    }
+    if (options.userId) {
+      itemsList = itemsList.filter(i => i.user_id === options.userId);
+    }
+    if (options.location && options.location !== 'ALL') {
+      const loc = options.location.toLowerCase();
+      itemsList = itemsList.filter(i => 
+        i.location.toLowerCase().includes(loc) || (i.building_zone && i.building_zone.toLowerCase().includes(loc))
+      );
+    }
+    if (options.q && options.q.trim().length > 0) {
+      const q = options.q.toLowerCase().trim();
+      itemsList = itemsList.filter(i => 
+        i.title.toLowerCase().includes(q) ||
+        i.description.toLowerCase().includes(q) ||
+        i.category.toLowerCase().includes(q) ||
+        i.location.toLowerCase().includes(q) ||
+        (i.characteristics && i.characteristics.toLowerCase().includes(q))
+      );
+    }
+
+    if (options.sort === 'oldest') {
+      itemsList.sort((a, b) => new Date(a.created_at || 0).getTime() - new Date(b.created_at || 0).getTime());
+    } else {
+      itemsList.sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
+    }
+
+    const total = itemsList.length;
+    const paginated = itemsList.slice(offset, offset + limit).map(item => {
+      const profile = this.memoryProfiles.get(item.user_id);
+      return {
+        ...item,
+        reporter_name: profile?.full_name || 'Campus Member',
+        reporter_campus: profile?.college || 'Central Campus',
+        reporter_avatar: profile?.avatar_url || '',
+        potential_matches_count: this.countPotentialMatchesForItem(item.id),
+        claims_count: this.countClaimsForItem(item.id)
+      };
+    });
+
+    return { items: paginated, total };
+  }
+
+  async getItemById(id: string): Promise<ItemRecord | null> {
+    if (this.isPostgrestReady) {
+      try {
+        const { data, error } = await supabaseAdmin
+          .from('items')
+          .select('*, profiles:user_id(full_name, college, avatar_url)')
+          .eq('id', id)
+          .maybeSingle();
+        if (!error && data) {
+          const imagesRes = await supabaseAdmin.from('item_images').select('id, image_url').eq('item_id', id);
+          return {
+            ...data,
+            reporter_name: data.profiles?.full_name || 'Campus Member',
+            reporter_campus: data.profiles?.college || 'Central Campus',
+            reporter_avatar: data.profiles?.avatar_url || '',
+            images: imagesRes.data || [],
+            potential_matches_count: this.countPotentialMatchesForItem(id),
+            claims_count: this.countClaimsForItem(id)
+          };
+        }
+      } catch {
+        // fallback
+      }
+    }
+
+    const item = this.memoryItems.get(id);
+    if (!item) return null;
+
+    const profile = this.memoryProfiles.get(item.user_id);
+    const images = Array.from(this.memoryItemImages.values()).filter(img => img.item_id === id);
+
+    return {
+      ...item,
+      reporter_name: profile?.full_name || 'Campus Member',
+      reporter_campus: profile?.college || 'Central Campus',
+      reporter_avatar: profile?.avatar_url || '',
+      images,
+      potential_matches_count: this.countPotentialMatchesForItem(id),
+      claims_count: this.countClaimsForItem(id)
+    };
+  }
+
+  async createItem(item: Omit<ItemRecord, 'created_at' | 'updated_at'>): Promise<ItemRecord> {
+    const now = new Date().toISOString();
+    const created: ItemRecord = {
+      ...item,
+      created_at: now,
+      updated_at: now
+    };
+
+    if (this.isPostgrestReady) {
+      try {
+        const { data, error } = await supabaseAdmin
+          .from('items')
+          .insert({
+            id: created.id,
+            user_id: created.user_id,
+            type: created.type,
+            title: created.title,
+            description: created.description,
+            category: created.category,
+            location: created.location,
+            building_zone: created.building_zone || null,
+            date: created.date,
+            time: created.time || null,
+            status: created.status,
+            primary_image: created.primary_image || null,
+            characteristics: created.characteristics || null,
+            ai_object_type: created.ai_object_type || null,
+            ai_category: created.ai_category || null,
+            ai_subcategory: created.ai_subcategory || null,
+            ai_brand: created.ai_brand || null,
+            ai_model: created.ai_model || null,
+            ai_color: created.ai_color || null,
+            ai_features: created.ai_features || [],
+            ai_image_confidence: created.ai_image_confidence || null,
+            ai_text_image_consistency: created.ai_text_image_consistency || null,
+            ai_analysis_version: created.ai_analysis_version || null,
+            ai_analyzed_at: created.ai_analyzed_at || null,
+            ai_image_analysis: created.ai_image_analysis || null
+          })
+          .select()
+          .single();
+        if (!error && data) {
+          if (created.primary_image) {
+            await supabaseAdmin.from('item_images').insert({
+              id: crypto.randomUUID(),
+              item_id: created.id,
+              image_url: created.primary_image
+            });
+          }
+          return data as ItemRecord;
+        }
+      } catch {
+        // fallback
+      }
+    }
+
+    this.memoryItems.set(created.id, created);
+    if (created.primary_image) {
+      const imgId = crypto.randomUUID();
+      this.memoryItemImages.set(imgId, {
+        id: imgId,
+        item_id: created.id,
+        image_url: created.primary_image
+      });
+    }
+    return created;
+  }
+
+  async updateItem(id: string, userId: string, updates: Partial<ItemRecord>): Promise<ItemRecord | null> {
+    const existing = await this.getItemById(id);
+    if (!existing) return null;
+    if (existing.user_id !== userId) return null;
+
+    const updated: ItemRecord = {
+      ...existing,
+      ...updates,
+      updated_at: new Date().toISOString()
+    };
+
+    if (this.isPostgrestReady) {
+      try {
+        const { data, error } = await supabaseAdmin
+          .from('items')
+          .update({
+            title: updated.title,
+            description: updated.description,
+            category: updated.category,
+            location: updated.location,
+            building_zone: updated.building_zone || null,
+            date: updated.date,
+            time: updated.time || null,
+            status: updated.status,
+            characteristics: updated.characteristics || null,
+            ai_object_type: updated.ai_object_type || null,
+            ai_category: updated.ai_category || null,
+            ai_subcategory: updated.ai_subcategory || null,
+            ai_brand: updated.ai_brand || null,
+            ai_model: updated.ai_model || null,
+            ai_color: updated.ai_color || null,
+            ai_features: updated.ai_features || [],
+            ai_image_confidence: updated.ai_image_confidence || null,
+            ai_text_image_consistency: updated.ai_text_image_consistency || null,
+            ai_analysis_version: updated.ai_analysis_version || null,
+            ai_analyzed_at: updated.ai_analyzed_at || null,
+            ai_image_analysis: updated.ai_image_analysis || null,
+            updated_at: updated.updated_at
+          })
+          .eq('id', id)
+          .eq('user_id', userId)
+          .select()
+          .single();
+        if (!error && data) return data as ItemRecord;
+      } catch {
+        // fallback
+      }
+    }
+
+    this.memoryItems.set(id, updated);
+    return updated;
+  }
+
+  async deleteItem(id: string, userId: string): Promise<boolean> {
+    const existing = await this.getItemById(id);
+    if (!existing || existing.user_id !== userId) return false;
+
+    if (this.isPostgrestReady) {
+      try {
+        const { error } = await supabaseAdmin
+          .from('items')
+          .delete()
+          .eq('id', id)
+          .eq('user_id', userId);
+        if (!error) return true;
+      } catch {
+        // fallback
+      }
+    }
+
+    this.memoryItems.delete(id);
+    return true;
+  }
+
+  // --------------------------------------------------------------------------
+  // CLAIMS
+  // --------------------------------------------------------------------------
+  async getClaimById(claimId: string): Promise<ClaimRecord | null> {
+    if (this.isPostgrestReady) {
+      try {
+        const { data, error } = await supabaseAdmin
+          .from('claims')
+          .select('*, items(*, profiles:user_id(full_name, college, avatar_url)), claimant:claimant_id(full_name, email, college, avatar_url)')
+          .eq('id', claimId)
+          .maybeSingle();
+        if (!error && data) {
+          return {
+            ...data,
+            item_title: data.items?.title,
+            item_type: data.items?.type,
+            item_category: data.items?.category,
+            item_location: data.items?.location,
+            item_image: data.items?.primary_image,
+            item_owner_id: data.items?.user_id,
+            reporter_name: data.items?.profiles?.full_name,
+            reporter_campus: data.items?.profiles?.college,
+            claimant_name: data.claimant?.full_name,
+            claimant_email: data.claimant?.email,
+            claimant_campus: data.claimant?.college,
+            claimant_avatar: data.claimant?.avatar_url
+          };
+        }
+      } catch {
+        // fallback
+      }
+    }
+
+    const claim = this.memoryClaims.get(claimId);
+    if (!claim) return null;
+
+    const item = this.memoryItems.get(claim.item_id);
+    const reporter = item ? this.memoryProfiles.get(item.user_id) : null;
+    const claimant = this.memoryProfiles.get(claim.claimant_id);
+
+    return {
+      ...claim,
+      item_title: item?.title,
+      item_type: item?.type,
+      item_category: item?.category,
+      item_location: item?.location,
+      item_image: item?.primary_image,
+      item_owner_id: item?.user_id,
+      reporter_name: reporter?.full_name,
+      reporter_campus: reporter?.college,
+      claimant_name: claimant?.full_name,
+      claimant_email: claimant?.email,
+      claimant_campus: claimant?.college,
+      claimant_avatar: claimant?.avatar_url
+    };
+  }
+
+  async getActiveClaim(itemId: string, claimantId: string): Promise<ClaimRecord | null> {
+    const claims = Array.from(this.memoryClaims.values()).filter(
+      c => c.item_id === itemId && c.claimant_id === claimantId && ['PENDING', 'APPROVED'].includes(c.status)
+    );
+    return claims.length > 0 ? claims[0] : null;
+  }
+
+  async getUserClaimForItem(itemId: string, claimantId: string): Promise<ClaimRecord | null> {
+    const claims = Array.from(this.memoryClaims.values()).filter(
+      c => c.item_id === itemId && c.claimant_id === claimantId
+    );
+    return claims.length > 0 ? claims[claims.length - 1] : null;
+  }
+
+  async getClaimsForItem(itemId: string): Promise<ClaimRecord[]> {
+    const claims = Array.from(this.memoryClaims.values()).filter(c => c.item_id === itemId);
+    return claims.map(c => {
+      const claimant = this.memoryProfiles.get(c.claimant_id);
+      return {
+        ...c,
+        claimant_name: claimant?.full_name || 'Campus Member',
+        claimant_email: claimant?.email,
+        claimant_campus: claimant?.college,
+        claimant_avatar: claimant?.avatar_url
+      };
+    });
+  }
+
+  async createClaim(claimData: Omit<ClaimRecord, 'created_at' | 'updated_at'>): Promise<ClaimRecord> {
+    const now = new Date().toISOString();
+    const created: ClaimRecord = {
+      ...claimData,
+      created_at: now,
+      updated_at: now
+    };
+
+    if (this.isPostgrestReady) {
+      try {
+        const { data, error } = await supabaseAdmin
+          .from('claims')
+          .insert({
+            id: created.id,
+            item_id: created.item_id,
+            claimant_id: created.claimant_id,
+            location_lost: created.location_lost,
+            date_lost: created.date_lost,
+            identifying_details: created.identifying_details,
+            proof_notes: created.proof_notes || null,
+            contact_share_consent: Boolean(created.contact_share_consent),
+            status: created.status
+          })
+          .select()
+          .single();
+        if (!error && data) return data as ClaimRecord;
+      } catch {
+        // fallback
+      }
+    }
+
+    this.memoryClaims.set(created.id, created);
+    return created;
+  }
+
+  async getClaimsSubmittedByUser(claimantId: string): Promise<ClaimRecord[]> {
+    const claims = Array.from(this.memoryClaims.values())
+      .filter(c => c.claimant_id === claimantId)
+      .sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
+
+    return claims.map(c => {
+      const item = this.memoryItems.get(c.item_id);
+      const reporter = item ? this.memoryProfiles.get(item.user_id) : null;
+      return {
+        ...c,
+        item_title: item?.title || 'Campus Item',
+        item_type: item?.type || 'FOUND',
+        item_category: item?.category,
+        item_location: item?.location,
+        item_image: item?.primary_image,
+        item_owner_id: item?.user_id,
+        reporter_name: reporter?.full_name || 'Campus Finder',
+        reporter_campus: reporter?.college || 'Central Campus'
+      };
+    });
+  }
+
+  async getClaimsReceivedByUser(ownerId: string): Promise<ClaimRecord[]> {
+    const userItemIds = new Set(
+      Array.from(this.memoryItems.values())
+        .filter(i => i.user_id === ownerId)
+        .map(i => i.id)
+    );
+
+    const claims = Array.from(this.memoryClaims.values())
+      .filter(c => userItemIds.has(c.item_id))
+      .sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
+
+    return claims.map(c => {
+      const item = this.memoryItems.get(c.item_id);
+      const claimant = this.memoryProfiles.get(c.claimant_id);
+      return {
+        ...c,
+        item_title: item?.title || 'Campus Item',
+        item_type: item?.type || 'FOUND',
+        item_category: item?.category,
+        item_location: item?.location,
+        item_image: item?.primary_image,
+        item_owner_id: item?.user_id,
+        claimant_name: claimant?.full_name || 'Campus Claimant',
+        claimant_email: claimant?.email,
+        claimant_campus: claimant?.college || 'Central Campus',
+        claimant_avatar: claimant?.avatar_url
+      };
+    });
+  }
+
+  async updateClaimStatus(
+    claimId: string,
+    status: 'APPROVED' | 'REJECTED',
+    resolutionNotes?: string
+  ): Promise<ClaimRecord | null> {
+    const claim = this.memoryClaims.get(claimId);
+    if (!claim) return null;
+
+    const updated: ClaimRecord = {
+      ...claim,
+      status,
+      resolution_notes: resolutionNotes || claim.resolution_notes,
+      updated_at: new Date().toISOString()
+    };
+
+    this.memoryClaims.set(claimId, updated);
+
+    // If approved, resolve item and reject competing claims
+    if (status === 'APPROVED') {
+      const item = this.memoryItems.get(claim.item_id);
+      if (item) {
+        this.memoryItems.set(item.id, {
+          ...item,
+          status: 'RESOLVED',
+          updated_at: new Date().toISOString()
+        });
+      }
+
+      // Reject competing pending claims
+      for (const [id, c] of this.memoryClaims.entries()) {
+        if (c.item_id === claim.item_id && id !== claimId && c.status === 'PENDING') {
+          this.memoryClaims.set(id, {
+            ...c,
+            status: 'REJECTED',
+            resolution_notes: 'Item resolved with another verified claimant.',
+            updated_at: new Date().toISOString()
+          });
+        }
+      }
+    } else {
+      // Recheck remaining pending claims on the item
+      const item = this.memoryItems.get(claim.item_id);
+      if (item && item.status === 'CLAIM_PENDING') {
+        const remaining = Array.from(this.memoryClaims.values()).some(
+          c => c.item_id === item.id && c.id !== claimId && c.status === 'PENDING'
+        );
+        this.memoryItems.set(item.id, {
+          ...item,
+          status: remaining ? 'CLAIM_PENDING' : 'ACTIVE',
+          updated_at: new Date().toISOString()
+        });
+      }
+    }
+
+    return updated;
+  }
+
+  // --------------------------------------------------------------------------
+  // NOTIFICATIONS
+  // --------------------------------------------------------------------------
+  async getNotifications(userId: string): Promise<{ notifications: NotificationRecord[]; unreadCount: number }> {
+    const userNotifs = Array.from(this.memoryNotifications.values())
+      .filter(n => n.user_id === userId)
+      .sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
+
+    const unreadCount = userNotifs.filter(n => !n.is_read).length;
+    return { notifications: userNotifs.slice(0, 50), unreadCount };
+  }
+
+  async createNotification(notif: Omit<NotificationRecord, 'created_at'>): Promise<NotificationRecord> {
+    const created: NotificationRecord = {
+      ...notif,
+      created_at: new Date().toISOString()
+    };
+    this.memoryNotifications.set(created.id, created);
+    return created;
+  }
+
+  async markNotificationRead(id: string, userId: string): Promise<boolean> {
+    const notif = this.memoryNotifications.get(id);
+    if (!notif || notif.user_id !== userId) return false;
+    this.memoryNotifications.set(id, { ...notif, is_read: true });
+    return true;
+  }
+
+  async markAllNotificationsRead(userId: string): Promise<number> {
+    let count = 0;
+    for (const [id, notif] of this.memoryNotifications.entries()) {
+      if (notif.user_id === userId && !notif.is_read) {
+        this.memoryNotifications.set(id, { ...notif, is_read: true });
+        count++;
+      }
+    }
+    return count;
+  }
+
+  // --------------------------------------------------------------------------
+  // POTENTIAL MATCHES
+  // --------------------------------------------------------------------------
+  async getPotentialMatchesForItem(itemId: string, type: 'LOST' | 'FOUND'): Promise<any[]> {
+    const matches = Array.from(this.memoryMatches.values()).filter(m => 
+      (type === 'LOST' ? m.lost_item_id === itemId : m.found_item_id === itemId) && m.match_score >= 40
+    );
+
+    return matches.map(m => {
+      const otherId = type === 'LOST' ? m.found_item_id : m.lost_item_id;
+      const otherItem = this.memoryItems.get(otherId);
+      const reporter = otherItem ? this.memoryProfiles.get(otherItem.user_id) : null;
+      return {
+        match_id: m.id,
+        match_score: m.match_score,
+        match_reasons: m.match_reasons,
+        matched_features: m.matched_features,
+        ai_evaluated: m.ai_evaluated,
+        match_status: m.status,
+        ...(otherItem || {}),
+        reporter_name: reporter?.full_name || 'Campus Member',
+        reporter_campus: reporter?.college || 'Central Campus'
+      };
+    }).sort((a, b) => b.match_score - a.match_score);
+  }
+
+  async savePotentialMatch(match: PotentialMatchRecord): Promise<void> {
+    this.memoryMatches.set(match.id, match);
+  }
+
+  async getExistingMatch(lostItemId: string, foundItemId: string): Promise<PotentialMatchRecord | null> {
+    for (const m of this.memoryMatches.values()) {
+      if (m.lost_item_id === lostItemId && m.found_item_id === foundItemId) {
+        return m;
+      }
+    }
+    return null;
+  }
+
+  // --------------------------------------------------------------------------
+  // STATS
+  // --------------------------------------------------------------------------
+  async getCampusStats(): Promise<{
+    itemsLost: number;
+    itemsFound: number;
+    totalItems: number;
+    resolvedItems: number;
+    activeClaims: number;
+    potentialMatches: number;
+    recoveryRate: number;
+  }> {
+    const items = Array.from(this.memoryItems.values());
+    const lostCount = items.filter(i => i.type === 'LOST').length;
+    const foundCount = items.filter(i => i.type === 'FOUND').length;
+    const resolvedCount = items.filter(i => i.status === 'RESOLVED').length;
+    const totalItems = lostCount + foundCount;
+    const activeClaims = Array.from(this.memoryClaims.values()).filter(c => c.status === 'PENDING').length;
+    const potentialMatches = this.memoryMatches.size;
+    const recoveryRate = totalItems > 0 ? Math.round((resolvedCount / Math.max(1, lostCount)) * 100) : 0;
+
+    return {
+      itemsLost: lostCount,
+      itemsFound: foundCount,
+      totalItems,
+      resolvedItems: resolvedCount,
+      activeClaims,
+      potentialMatches,
+      recoveryRate: Math.min(100, Math.max(0, recoveryRate))
+    };
+  }
+
+  async getUserPersonalStats(userId: string): Promise<{
+    itemsLost: number;
+    itemsFound: number;
+    totalItems: number;
+    resolvedItems: number;
+    activeClaims: number;
+    potentialMatches: number;
+    unreadNotifications: number;
+    recoveryRate: number;
+  }> {
+    const userItems = Array.from(this.memoryItems.values()).filter(i => i.user_id === userId);
+    const itemsLost = userItems.filter(i => i.type === 'LOST').length;
+    const itemsFound = userItems.filter(i => i.type === 'FOUND').length;
+    const resolvedItems = userItems.filter(i => i.status === 'RESOLVED').length;
+    const totalItems = itemsLost + itemsFound;
+
+    const activeClaims = Array.from(this.memoryClaims.values()).filter(
+      c => c.claimant_id === userId && c.status === 'PENDING'
+    ).length;
+
+    const userItemIds = new Set(userItems.map(i => i.id));
+    const potentialMatches = Array.from(this.memoryMatches.values()).filter(
+      m => userItemIds.has(m.lost_item_id) || userItemIds.has(m.found_item_id)
+    ).length;
+
+    const unreadNotifications = Array.from(this.memoryNotifications.values()).filter(
+      n => n.user_id === userId && !n.is_read
+    ).length;
+
+    const recoveryRate = totalItems > 0 ? Math.round((resolvedItems / Math.max(1, itemsLost)) * 100) : 0;
+
+    return {
+      itemsLost,
+      itemsFound,
+      totalItems,
+      resolvedItems,
+      activeClaims,
+      potentialMatches,
+      unreadNotifications,
+      recoveryRate: Math.min(100, Math.max(0, recoveryRate))
+    };
+  }
+
+  // Helpers
+  private countPotentialMatchesForItem(itemId: string): number {
+    return Array.from(this.memoryMatches.values()).filter(
+      m => m.lost_item_id === itemId || m.found_item_id === itemId
+    ).length;
+  }
+
+  private countClaimsForItem(itemId: string): number {
+    return Array.from(this.memoryClaims.values()).filter(c => c.item_id === itemId).length;
+  }
+
+  // AI Matcher raw query helper
+  getAllActiveItemsForMatching(opposingType: 'LOST' | 'FOUND', targetItemId: string): ItemRecord[] {
+    return Array.from(this.memoryItems.values()).filter(
+      i => i.type === opposingType && ['ACTIVE', 'MATCH_FOUND'].includes(i.status) && i.id !== targetItemId
+    );
+  }
+}
+
+export const supabaseDb = new SupabaseDatabaseService();

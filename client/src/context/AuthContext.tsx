@@ -10,7 +10,6 @@ interface AuthContextType {
   login: (email: string, password: string) => Promise<void>;
   register: (name: string, email: string, password: string, campus?: string, phone?: string) => Promise<void>;
   logout: () => Promise<void>;
-  demoLogin: (email: string) => Promise<void>;
   updateUser: (updatedUser: Partial<User>) => void;
 }
 
@@ -21,54 +20,73 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [token, setToken] = useState<string | null>(localStorage.getItem('findit_auth_token'));
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
+  // Helper to fetch and sync up-to-date user profile
+  const syncUserProfile = async (sessionUser?: any) => {
+    try {
+      const res = await api.getCurrentUser();
+      if (res?.user) {
+        setUser(res.user);
+        return res.user;
+      }
+    } catch (err) {
+      console.warn('Could not fetch server profile, using fallback profile attributes:', err);
+    }
+
+    if (sessionUser) {
+      const fallbackUser: User = {
+        id: sessionUser.id,
+        email: sessionUser.email || '',
+        name: sessionUser.user_metadata?.full_name || sessionUser.user_metadata?.name || sessionUser.email?.split('@')[0] || 'Campus Member',
+        campus: sessionUser.user_metadata?.college || sessionUser.user_metadata?.campus || 'Central Campus',
+        avatar: sessionUser.user_metadata?.avatar_url || `https://api.dicebear.com/7.x/bottts/svg?seed=${sessionUser.id}`,
+        phone: sessionUser.user_metadata?.phone || '',
+        role: 'student'
+      };
+      setUser(fallbackUser);
+      return fallbackUser;
+    }
+
+    return null;
+  };
+
   useEffect(() => {
     let mounted = true;
 
     async function initAuth() {
       try {
+        const storedToken = localStorage.getItem('findit_auth_token');
+
+        if (storedToken) {
+          try {
+            const res = await api.getCurrentUser();
+            if (res?.user && mounted) {
+              setToken(storedToken);
+              setUser(res.user);
+              setIsLoading(false);
+              return;
+            }
+          } catch {
+            // Token is invalid/expired
+          }
+        }
+
         if (isSupabaseConfigured) {
-          // 1. Check Supabase session
           const { data: { session } } = await supabase.auth.getSession();
           if (session?.user && mounted) {
             const sbToken = session.access_token;
             localStorage.setItem('findit_auth_token', sbToken);
             setToken(sbToken);
-
-            // Fetch profile
-            try {
-              const res = await api.getCurrentUser();
-              if (mounted) setUser(res.user);
-            } catch {
-              if (mounted) {
-                setUser({
-                  id: session.user.id,
-                  email: session.user.email || '',
-                  name: session.user.user_metadata?.full_name || session.user.user_metadata?.name || 'Campus Student',
-                  campus: session.user.user_metadata?.college || session.user.user_metadata?.campus || 'Central Campus',
-                  avatar: session.user.user_metadata?.avatar_url || `https://api.dicebear.com/7.x/bottts/svg?seed=${session.user.id}`,
-                  role: 'student'
-                });
-              }
-            }
+            await syncUserProfile(session.user);
             if (mounted) setIsLoading(false);
             return;
           }
         }
 
-        // 2. Fallback to stored local token
-        const storedToken = localStorage.getItem('findit_auth_token');
-        if (storedToken) {
-          try {
-            const res = await api.getCurrentUser();
-            if (mounted) setUser(res.user);
-          } catch (err) {
-            console.warn('Session expired or invalid token:', err);
-            localStorage.removeItem('findit_auth_token');
-            if (mounted) {
-              setToken(null);
-              setUser(null);
-            }
-          }
+        // If no valid session, clear state
+        if (mounted) {
+          localStorage.removeItem('findit_auth_token');
+          setToken(null);
+          setUser(null);
         }
       } catch (err) {
         console.error('Auth initialization error:', err);
@@ -79,26 +97,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     initAuth();
 
-    // Supabase Auth State Change Listener
+    // Supabase Auth State Change Listener (authoritative listener)
     let authSubscription: any = null;
     if (isSupabaseConfigured) {
       const { data } = supabase.auth.onAuthStateChange(async (event, session) => {
-        if (event === 'SIGNED_IN' && session?.user) {
-          const sbToken = session.access_token;
-          localStorage.setItem('findit_auth_token', sbToken);
-          setToken(sbToken);
-          try {
-            const res = await api.getCurrentUser();
-            setUser(res.user);
-          } catch {
-            setUser({
-              id: session.user.id,
-              email: session.user.email || '',
-              name: session.user.user_metadata?.full_name || session.user.user_metadata?.name || 'Campus Student',
-              campus: session.user.user_metadata?.college || 'Central Campus',
-              avatar: session.user.user_metadata?.avatar_url || '',
-              role: 'student'
-            });
+        if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED') {
+          if (session?.user) {
+            const sbToken = session.access_token;
+            localStorage.setItem('findit_auth_token', sbToken);
+            setToken(sbToken);
+            await syncUserProfile(session.user);
           }
         } else if (event === 'SIGNED_OUT') {
           localStorage.removeItem('findit_auth_token');
@@ -116,112 +124,61 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const login = async (email: string, password: string) => {
+    const cleanEmail = email.trim().toLowerCase();
+
+    // 1. First attempt Supabase direct sign-in
     if (isSupabaseConfigured) {
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email: email.trim(),
-        password
-      });
+      try {
+        const { data, error } = await supabase.auth.signInWithPassword({
+          email: cleanEmail,
+          password
+        });
 
-      if (error) {
-        // If Supabase auth fails, try local API
-        try {
-          const res = await api.login({ email, password });
-          localStorage.setItem('findit_auth_token', res.token);
-          setToken(res.token);
-          setUser(res.user);
+        if (!error && data?.session) {
+          localStorage.setItem('findit_auth_token', data.session.access_token);
+          setToken(data.session.access_token);
+          await syncUserProfile(data.user);
           return;
-        } catch {
-          throw new Error(error.message || 'Invalid email or password.');
         }
+      } catch (directErr) {
+        console.warn('Direct Supabase sign-in encountered an issue, trying backend auth:', directErr);
       }
+    }
 
-      if (data.session) {
-        localStorage.setItem('findit_auth_token', data.session.access_token);
-        setToken(data.session.access_token);
-        try {
-          const res = await api.getCurrentUser();
-          setUser(res.user);
-        } catch {
-          setUser({
-            id: data.user.id,
-            email: data.user.email || '',
-            name: data.user.user_metadata?.full_name || 'Campus Student',
-            campus: data.user.user_metadata?.college || 'Central Campus',
-            avatar: data.user.user_metadata?.avatar_url || '',
-            role: 'student'
-          });
-        }
-      }
-    } else {
-      const res = await api.login({ email, password });
+    // 2. Fallback to server /auth/login (which auto-confirms email and validates via Supabase Auth)
+    const res = await api.login({ email: cleanEmail, password });
+    if (res?.token && res?.user) {
       localStorage.setItem('findit_auth_token', res.token);
       setToken(res.token);
       setUser(res.user);
+      return;
     }
+
+    throw new Error('Invalid email or password. Please check your credentials.');
   };
 
   const register = async (name: string, email: string, password: string, campus?: string, phone?: string) => {
-    if (isSupabaseConfigured) {
-      const avatarUrl = `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(name.trim())}`;
-      const { data, error } = await supabase.auth.signUp({
-        email: email.trim(),
-        password,
-        options: {
-          data: {
-            full_name: name.trim(),
-            college: campus?.trim() || 'Central Campus',
-            phone: phone?.trim() || null,
-            avatar_url: avatarUrl
-          }
-        }
-      });
+    const cleanEmail = email.trim().toLowerCase();
+    const cleanName = name.trim();
 
-      if (error) {
-        try {
-          const res = await api.register({ name, email, password, campus, phone });
-          localStorage.setItem('findit_auth_token', res.token);
-          setToken(res.token);
-          setUser(res.user);
-          return;
-        } catch {
-          throw new Error(error.message || 'Registration failed.');
-        }
-      }
+    // Register via server to ensure auto-confirmed email in Supabase Auth
+    const res = await api.register({
+      name: cleanName,
+      email: cleanEmail,
+      password,
+      campus,
+      phone
+    });
 
-      if (data.session) {
-        localStorage.setItem('findit_auth_token', data.session.access_token);
-        setToken(data.session.access_token);
-      }
-
-      // Also ensure backend record is ready
-      try {
-        const res = await api.register({ name, email, password, campus, phone });
-        localStorage.setItem('findit_auth_token', res.token);
-        setToken(res.token);
-        setUser(res.user);
-      } catch {
-        if (data.user) {
-          setUser({
-            id: data.user.id,
-            email: data.user.email || '',
-            name: name.trim(),
-            campus: campus?.trim() || 'Central Campus',
-            phone: phone?.trim(),
-            avatar: avatarUrl,
-            role: 'student'
-          });
-        }
-      }
-    } else {
-      const res = await api.register({ name, email, password, campus, phone });
+    if (res?.token && res?.user) {
       localStorage.setItem('findit_auth_token', res.token);
       setToken(res.token);
       setUser(res.user);
+      return;
     }
-  };
 
-  const demoLogin = async (email: string) => {
-    await login(email, 'password123');
+    // If no session token returned, attempt direct login
+    await login(cleanEmail, password);
   };
 
   const logout = async () => {
@@ -242,7 +199,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, token, isLoading, login, register, logout, demoLogin, updateUser }}>
+    <AuthContext.Provider value={{ user, token, isLoading, login, register, logout, updateUser }}>
       {children}
     </AuthContext.Provider>
   );

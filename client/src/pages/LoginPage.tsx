@@ -2,10 +2,10 @@ import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.js';
 import { useToast } from '../context/ToastContext.js';
-import { Sparkles, Mail, Lock, ArrowRight, Eye, EyeOff, CheckCircle2, AlertCircle, Shield } from 'lucide-react';
+import { Mail, Lock, ArrowRight, Eye, EyeOff, AlertCircle } from 'lucide-react';
 
 export function LoginPage() {
-  const { login, demoLogin } = useAuth();
+  const { login } = useAuth();
   const { showToast } = useToast();
   const navigate = useNavigate();
 
@@ -40,24 +40,6 @@ export function LoginPage() {
     }
   };
 
-  const handleDemoLogin = async (demoEmail: string, roleName: string) => {
-    setError(null);
-    setIsLoading(true);
-    try {
-      await demoLogin(demoEmail);
-      showToast({
-        type: 'success',
-        title: 'Demo Session Active',
-        message: `Logged in as ${roleName}.`
-      });
-      navigate('/dashboard');
-    } catch (err: any) {
-      setError(err.message || 'Demo login failed.');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
   return (
     <div className="min-h-[85vh] flex items-center justify-center px-4 py-12">
       <div className="w-full max-w-md space-y-6">
@@ -72,42 +54,6 @@ export function LoginPage() {
           <p className="text-xs text-[#66756C]">
             Access your campus lost reports, matches, and recovery claims
           </p>
-        </div>
-
-        {/* Demo Fast-Login Strip for Evaluation */}
-        <div className="rounded-2xl bg-white border border-brand-200 p-4 card-3d">
-          <div className="flex items-center gap-1.5 text-xs font-bold text-brand-700 mb-2.5">
-            <Sparkles className="w-3.5 h-3.5 text-brand-600" />
-            <span>Instant Evaluation / Demo Accounts:</span>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-            <button
-              type="button"
-              onClick={() => handleDemoLogin('alex.turner@campus.edu', 'Alex Turner (CS Student)')}
-              className="px-3 py-2 rounded-xl text-left bg-[#F7FBF8] hover:bg-[#EEF8F1] border border-[#E3ECE6] hover:border-brand-300 text-[#102018] transition-all text-xs flex flex-col group cursor-pointer"
-            >
-              <span className="font-bold text-[#102018] text-[11px] truncate group-hover:text-brand-700">Alex Turner</span>
-              <span className="text-[10px] text-brand-600 font-medium">Lost MacBook</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => handleDemoLogin('sarah.lin@campus.edu', 'Sarah Lin (Design Student)')}
-              className="px-3 py-2 rounded-xl text-left bg-[#F7FBF8] hover:bg-[#EEF8F1] border border-[#E3ECE6] hover:border-brand-300 text-[#102018] transition-all text-xs flex flex-col group cursor-pointer"
-            >
-              <span className="font-bold text-[#102018] text-[11px] truncate group-hover:text-brand-700">Sarah Lin</span>
-              <span className="text-[10px] text-brand-700 font-medium">Found MacBook</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => handleDemoLogin('marcus.vance@campus.edu', 'Marcus Vance (Bio Student)')}
-              className="px-3 py-2 rounded-xl text-left bg-[#F7FBF8] hover:bg-[#EEF8F1] border border-[#E3ECE6] hover:border-brand-300 text-[#102018] transition-all text-xs flex flex-col group cursor-pointer"
-            >
-              <span className="font-bold text-[#102018] text-[11px] truncate group-hover:text-brand-700">Marcus Vance</span>
-              <span className="text-[10px] text-amber-600 font-medium">Lost Wallet</span>
-            </button>
-          </div>
         </div>
 
         {/* Login Form Card */}

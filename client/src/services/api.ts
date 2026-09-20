@@ -41,17 +41,17 @@ class ApiClient {
   }
 
   // Auth endpoints
-  async login(credentials: { email: string; password: string }) {
-    return this.request<{ user: any; token: string; message: string }>('/auth/login', {
-      method: 'POST',
-      body: JSON.stringify(credentials)
-    });
-  }
-
   async register(userData: { name: string; email: string; password: string; campus?: string; phone?: string }) {
     return this.request<{ user: any; token: string; message: string }>('/auth/register', {
       method: 'POST',
       body: JSON.stringify(userData)
+    });
+  }
+
+  async login(credentials: { email: string; password: string }) {
+    return this.request<{ user: any; token: string; message: string }>('/auth/login', {
+      method: 'POST',
+      body: JSON.stringify(credentials)
     });
   }
 
@@ -116,8 +116,25 @@ class ApiClient {
     }>(`/items/${id}`);
   }
 
+  async verifyImage(formData: FormData) {
+    return this.request<{
+      imageAnalysis: any;
+      consistency: any;
+      normText: any;
+    }>('/items/verify-image', {
+      method: 'POST',
+      body: formData
+    });
+  }
+
   async createItem(formData: FormData) {
-    return this.request<{ message: string; item: any; matchesFound: number }>('/items', {
+    return this.request<{ 
+      message: string; 
+      item: any; 
+      matchesFound: number;
+      consistency?: any;
+      warning?: string;
+    }>('/items', {
       method: 'POST',
       body: formData
     });
@@ -204,6 +221,21 @@ class ApiClient {
       categories: { category: string; count: number }[];
       recentRecoveries: any[];
     }>('/stats');
+  }
+
+  async getUserStats() {
+    return this.request<{
+      stats: {
+        itemsLost: number;
+        itemsFound: number;
+        totalItems: number;
+        resolvedItems: number;
+        activeClaims: number;
+        potentialMatches: number;
+        unreadNotifications: number;
+        recoveryRate: number;
+      };
+    }>('/stats/user');
   }
 }
 

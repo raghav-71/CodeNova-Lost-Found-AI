@@ -25,6 +25,56 @@ export interface User {
   created_at?: string;
 }
 
+export type ConsistencyLevel = 'CONSISTENT' | 'MINOR_MISMATCH' | 'MAJOR_MISMATCH' | 'UNKNOWN_IMAGE';
+
+export interface AIImageAnalysis {
+  object_type: string;
+  category: string;
+  subcategory: string;
+  brand?: string;
+  model?: string;
+  color?: string;
+  shape?: string;
+  material?: string;
+  visible_features: string[];
+  visible_damage: string[];
+  visible_accessories: string[];
+  text_logos: string[];
+  confidence: number;
+  is_low_quality: boolean;
+  analysis_model: string;
+  analyzed_at: string;
+}
+
+export interface ConsistencyCheckResult {
+  consistency_level: ConsistencyLevel;
+  object_compatible: boolean;
+  has_mismatch: boolean;
+  mismatch_type?: 'OBJECT_MISMATCH' | 'BRAND_MISMATCH' | 'COLOR_MISMATCH';
+  user_summary: {
+    claimed_object: string;
+    claimed_category: string;
+    claimed_subcategory?: string;
+    claimed_brand?: string;
+    claimed_color?: string;
+  };
+  image_summary?: {
+    detected_object: string;
+    detected_category: string;
+    detected_subcategory?: string;
+    detected_brand?: string;
+    detected_color?: string;
+    confidence: number;
+  };
+  warning_title?: string;
+  warning_message?: string;
+  suggested_correction?: {
+    category?: string;
+    title?: string;
+    characteristics?: string;
+  };
+}
+
 export interface Item {
   id: string;
   user_id: string;
@@ -42,6 +92,19 @@ export interface Item {
   primary_image?: string;
   characteristics?: string;
   contact_preference?: string;
+  // Multimodal AI Verification Fields
+  ai_object_type?: string;
+  ai_category?: string;
+  ai_subcategory?: string;
+  ai_brand?: string;
+  ai_model?: string;
+  ai_color?: string;
+  ai_features?: string[];
+  ai_image_confidence?: number;
+  ai_text_image_consistency?: ConsistencyLevel | string;
+  ai_analysis_version?: string;
+  ai_analyzed_at?: string;
+  ai_image_analysis?: AIImageAnalysis;
   created_at: string;
   updated_at: string;
   reporter_name?: string;
@@ -61,6 +124,7 @@ export interface PotentialMatch {
   match_reasons: string[];
   matched_features: string[];
   ai_evaluated: number | boolean;
+  multimodal_verified?: boolean;
   match_status?: string;
   id: string;
   user_id: string;

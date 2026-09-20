@@ -38,11 +38,27 @@ CREATE TABLE IF NOT EXISTS public.items (
     description TEXT NOT NULL,
     category TEXT NOT NULL,
     location TEXT NOT NULL,
+    building_zone TEXT,
     latitude DOUBLE PRECISION,
     longitude DOUBLE PRECISION,
-    date_of_item TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    image_url TEXT,
+    date TEXT NOT NULL,
+    time TEXT,
     status TEXT NOT NULL CHECK (status IN ('ACTIVE', 'MATCH_FOUND', 'CLAIM_PENDING', 'RESOLVED', 'CLOSED')) DEFAULT 'ACTIVE',
+    primary_image TEXT,
+    characteristics TEXT,
+    -- Multimodal AI Verification & Image Analysis Fields
+    ai_object_type TEXT,
+    ai_category TEXT,
+    ai_subcategory TEXT,
+    ai_brand TEXT,
+    ai_model TEXT,
+    ai_color TEXT,
+    ai_features JSONB DEFAULT '[]'::jsonb,
+    ai_image_confidence NUMERIC,
+    ai_text_image_consistency TEXT,
+    ai_analysis_version TEXT,
+    ai_analyzed_at TIMESTAMPTZ,
+    ai_image_analysis JSONB,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -52,7 +68,6 @@ CREATE INDEX IF NOT EXISTS idx_items_type ON public.items(type);
 CREATE INDEX IF NOT EXISTS idx_items_category ON public.items(category);
 CREATE INDEX IF NOT EXISTS idx_items_status ON public.items(status);
 CREATE INDEX IF NOT EXISTS idx_items_user_id ON public.items(user_id);
-CREATE INDEX IF NOT EXISTS idx_items_date ON public.items(date_of_item DESC);
 CREATE INDEX IF NOT EXISTS idx_items_created_at ON public.items(created_at DESC);
 
 -- ====================================================================
@@ -77,8 +92,10 @@ CREATE TABLE IF NOT EXISTS public.potential_matches (
     lost_item_id UUID NOT NULL REFERENCES public.items(id) ON DELETE CASCADE,
     found_item_id UUID NOT NULL REFERENCES public.items(id) ON DELETE CASCADE,
     match_score NUMERIC NOT NULL,
-    match_reason TEXT NOT NULL,
-    matched_attributes JSONB NOT NULL DEFAULT '[]'::jsonb,
+    match_reasons JSONB NOT NULL DEFAULT '[]'::jsonb,
+    matched_features JSONB NOT NULL DEFAULT '[]'::jsonb,
+    ai_evaluated BOOLEAN NOT NULL DEFAULT FALSE,
+    status TEXT NOT NULL DEFAULT 'PENDING',
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     CONSTRAINT unique_lost_found_match UNIQUE (lost_item_id, found_item_id)
 );
@@ -95,8 +112,12 @@ CREATE TABLE IF NOT EXISTS public.claims (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     item_id UUID NOT NULL REFERENCES public.items(id) ON DELETE CASCADE,
     claimant_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
-    message TEXT,
-    verification_answers JSONB NOT NULL DEFAULT '{}'::jsonb,
+    location_lost TEXT NOT NULL,
+    date_lost TEXT NOT NULL,
+    identifying_details TEXT NOT NULL,
+    proof_notes TEXT,
+    contact_share_consent BOOLEAN NOT NULL DEFAULT TRUE,
+    resolution_notes TEXT,
     status TEXT NOT NULL CHECK (status IN ('PENDING', 'APPROVED', 'REJECTED', 'CANCELLED')) DEFAULT 'PENDING',
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -116,6 +137,7 @@ CREATE TABLE IF NOT EXISTS public.notifications (
     type TEXT NOT NULL,
     title TEXT NOT NULL,
     message TEXT NOT NULL,
+    link_url TEXT,
     related_item_id UUID REFERENCES public.items(id) ON DELETE SET NULL,
     related_claim_id UUID REFERENCES public.claims(id) ON DELETE SET NULL,
     is_read BOOLEAN NOT NULL DEFAULT FALSE,
@@ -132,27 +154,31 @@ CREATE INDEX IF NOT EXISTS idx_notifications_unread ON public.notifications(user
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER AS $$
 BEGIN
-    INSERT INTO public.profiles (id, full_name, email, avatar_url, college)
+    INSERT INTO public.profiles (id, full_name, email, avatar_url, college, phone)
     VALUES (
         NEW.id,
         COALESCE(NEW.raw_user_meta_data->>'full_name', NEW.raw_user_meta_data->>'name', split_part(NEW.email, '@', 1)),
         NEW.email,
         COALESCE(NEW.raw_user_meta_data->>'avatar_url', 'https://api.dicebear.com/7.x/bottts/svg?seed=' || encode(digest(NEW.email, 'sha256'), 'hex')),
-        COALESCE(NEW.raw_user_meta_data->>'college', NEW.raw_user_meta_data->>'campus', 'Central Campus')
+        COALESCE(NEW.raw_user_meta_data->>'college', NEW.raw_user_meta_data->>'campus', 'Central Campus'),
+        NEW.raw_user_meta_data->>'phone'
     )
     ON CONFLICT (id) DO UPDATE
     SET full_name = EXCLUDED.full_name,
         avatar_url = EXCLUDED.avatar_url,
+        college = EXCLUDED.college,
+        phone = COALESCE(EXCLUDED.phone, public.profiles.phone),
         updated_at = NOW();
 
     -- Create welcome notification
-    INSERT INTO public.notifications (id, user_id, type, title, message)
+    INSERT INTO public.notifications (id, user_id, type, title, message, link_url)
     VALUES (
         gen_random_uuid(),
         NEW.id,
         'WELCOME',
         'Welcome to FindIt AI!',
-        'Explore campus lost & found items or report a lost item to get started.'
+        'Explore campus lost & found items or report a lost item to get started.',
+        '/dashboard'
     );
 
     RETURN NEW;
@@ -197,7 +223,7 @@ CREATE POLICY "Users can update their own profile"
 -- --------------------------------------------------------------------
 -- ITEMS POLICIES
 -- --------------------------------------------------------------------
--- Items are viewable by everyone
+-- Items are viewable by everyone for discovery and matching
 CREATE POLICY "Items are viewable by everyone" 
     ON public.items FOR SELECT 
     USING (true);
@@ -300,7 +326,7 @@ CREATE POLICY "Authorized users can update claims"
 -- --------------------------------------------------------------------
 -- NOTIFICATIONS POLICIES
 -- --------------------------------------------------------------------
--- Users can view their own notifications
+-- Users can only view their own notifications
 CREATE POLICY "Users can view their own notifications" 
     ON public.notifications FOR SELECT 
     USING (user_id = auth.uid());

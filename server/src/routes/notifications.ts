@@ -1,26 +1,14 @@
 import { Router, Response } from 'express';
-import { DatabaseService } from '../db/database.js';
+import { supabaseDb } from '../db/supabaseDb.js';
 import { AuthenticatedRequest, authenticateToken } from '../middleware/auth.js';
 
-export function createNotificationsRouter(db: DatabaseService): Router {
+export function createNotificationsRouter(): Router {
   const router = Router();
 
-  // Get notifications for current user
-  router.get('/', authenticateToken, (req: AuthenticatedRequest, res: Response) => {
+  // Get notifications for current user (isolated)
+  router.get('/', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
     try {
-      const notifications = db.query<any>(
-        `SELECT * FROM notifications 
-         WHERE user_id = ? 
-         ORDER BY created_at DESC 
-         LIMIT 50`,
-        [req.user!.id]
-      );
-
-      const unreadCount = db.queryOne<{ count: number }>(
-        `SELECT COUNT(*) as count FROM notifications WHERE user_id = ? AND is_read = 0`,
-        [req.user!.id]
-      )?.count || 0;
-
+      const { notifications, unreadCount } = await supabaseDb.getNotifications(req.user!.id);
       return res.json({ notifications, unreadCount });
     } catch (err: any) {
       console.error('Fetch notifications error:', err);
@@ -29,10 +17,13 @@ export function createNotificationsRouter(db: DatabaseService): Router {
   });
 
   // Mark single notification as read
-  router.put('/:id/read', authenticateToken, (req: AuthenticatedRequest, res: Response) => {
+  router.put('/:id/read', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
     try {
       const { id } = req.params;
-      db.run(`UPDATE notifications SET is_read = 1 WHERE id = ? AND user_id = ?`, [id, req.user!.id]);
+      const updated = await supabaseDb.markNotificationRead(id, req.user!.id);
+      if (!updated) {
+        return res.status(404).json({ error: 'Notification not found or access denied.' });
+      }
       return res.json({ message: 'Notification marked as read.' });
     } catch (err: any) {
       console.error('Mark read error:', err);
@@ -41,10 +32,10 @@ export function createNotificationsRouter(db: DatabaseService): Router {
   });
 
   // Mark all notifications as read
-  router.put('/read-all', authenticateToken, (req: AuthenticatedRequest, res: Response) => {
+  router.put('/read-all', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
     try {
-      db.run(`UPDATE notifications SET is_read = 1 WHERE user_id = ?`, [req.user!.id]);
-      return res.json({ message: 'All notifications marked as read.' });
+      const count = await supabaseDb.markAllNotificationsRead(req.user!.id);
+      return res.json({ message: 'All notifications marked as read.', updatedCount: count });
     } catch (err: any) {
       console.error('Mark all read error:', err);
       return res.status(500).json({ error: 'Failed to mark all as read.' });
