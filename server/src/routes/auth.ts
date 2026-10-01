@@ -2,6 +2,8 @@ import { Router, Response, Request } from 'express';
 import { supabaseDb } from '../db/supabaseDb.js';
 import { AuthenticatedRequest, authenticateToken } from '../middleware/auth.js';
 import { supabaseAdmin, supabasePublic, isSupabaseServerConfigured } from '../services/supabase.js';
+import { validateRegister, validateLogin, sanitizeString } from '../middleware/validation.js';
+import { authLimiter } from '../middleware/rateLimiters.js';
 
 export function createAuthRouter(): Router {
   const router = Router();
@@ -9,7 +11,7 @@ export function createAuthRouter(): Router {
   // =========================================================================
   // 1. REGISTER NEW USER (Authoritative Supabase Auth creation + confirmed)
   // =========================================================================
-  router.post('/register', async (req: Request, res: Response) => {
+  router.post('/register', authLimiter, validateRegister, async (req: Request, res: Response) => {
     try {
       const { name, email, password, campus, phone } = req.body;
 
@@ -97,7 +99,7 @@ export function createAuthRouter(): Router {
   // =========================================================================
   // 2. LOGIN USER (Authoritative Supabase Auth signInWithPassword)
   // =========================================================================
-  router.post('/login', async (req: Request, res: Response) => {
+  router.post('/login', authLimiter, validateLogin, async (req: Request, res: Response) => {
     try {
       const { email, password } = req.body;
 
@@ -230,15 +232,27 @@ export function createAuthRouter(): Router {
       const { name, campus, phone, avatar } = req.body;
       const userId = req.user!.id;
 
-      const updated = await supabaseDb.updateProfile(userId, {
-        name,
-        campus,
-        phone,
-        avatar
+      const cleanName = name ? sanitizeString(name, 100) : undefined;
+      const cleanCampus = campus ? sanitizeString(campus, 100) : undefined;
+      const cleanPhone = phone ? sanitizeString(phone, 30) : undefined;
+      const cleanAvatar = avatar ? sanitizeString(avatar, 500) : undefined;
+
+      let updated = await supabaseDb.updateProfile(userId, {
+        name: cleanName,
+        campus: cleanCampus,
+        phone: cleanPhone,
+        avatar: cleanAvatar
       });
 
       if (!updated) {
-        return res.status(404).json({ error: 'Profile not found.' });
+        updated = await supabaseDb.upsertProfile({
+          id: userId,
+          full_name: cleanName || req.user!.name || 'Campus Member',
+          email: req.user!.email,
+          college: cleanCampus || req.user!.campus || 'Central Campus',
+          phone: cleanPhone || req.user!.phone || '',
+          avatar_url: cleanAvatar || req.user!.avatar
+        });
       }
 
       return res.json({
@@ -250,7 +264,7 @@ export function createAuthRouter(): Router {
           campus: updated.college,
           phone: updated.phone,
           avatar: updated.avatar_url,
-          role: 'student',
+          role: req.user!.role || 'student',
           updated_at: updated.updated_at
         }
       });
@@ -263,15 +277,16 @@ export function createAuthRouter(): Router {
   // =========================================================================
   // 5. FORGOT PASSWORD DISPATCH
   // =========================================================================
-  router.post('/forgot-password', async (req: Request, res: Response) => {
+  router.post('/forgot-password', authLimiter, async (req: Request, res: Response) => {
     const { email } = req.body;
-    if (!email) {
+    if (!email || typeof email !== 'string') {
       return res.status(400).json({ error: 'Email is required.' });
     }
     
+    const cleanEmail = email.trim().toLowerCase().slice(0, 254);
     if (isSupabaseServerConfigured) {
       try {
-        await supabasePublic.auth.resetPasswordForEmail(email.trim().toLowerCase());
+        await supabasePublic.auth.resetPasswordForEmail(cleanEmail);
       } catch (e) {
         console.warn('Password reset trigger error:', e);
       }

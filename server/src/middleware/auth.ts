@@ -56,4 +56,20 @@ export async function optionalAuthenticateToken(req: AuthenticatedRequest, _res:
   }
 
   return next();
+}/**
+ * Strict administrator authorization middleware:
+ * Enforces that the authenticated user possesses verified server-side admin role.
+ * User ID is verified via Supabase Auth session, and role is determined strictly
+ * by server-side verification (app_metadata / ADMIN_EMAILS / profiles.role).
+ */
+export async function requireAdmin(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+  if (!req.user) {
+    return res.status(401).json({ error: 'Access denied. Authentication required.' });
+  }
+
+  if (req.user.role !== 'admin') {
+    return res.status(403).json({ error: 'Access forbidden. Administrator privileges required.' });
+  }
+
+  return next();
 }

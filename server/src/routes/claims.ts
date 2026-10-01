@@ -2,12 +2,14 @@ import { Router, Response } from 'express';
 import crypto from 'crypto';
 import { supabaseDb } from '../db/supabaseDb.js';
 import { AuthenticatedRequest, authenticateToken } from '../middleware/auth.js';
+import { claimLimiter } from '../middleware/rateLimiters.js';
+import { validateClaim, sanitizeString } from '../middleware/validation.js';
 
 export function createClaimsRouter(): Router {
   const router = Router();
 
   // Submit a claim on an item
-  router.post('/', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
+  router.post('/', claimLimiter, authenticateToken, validateClaim, async (req: AuthenticatedRequest, res: Response) => {
     try {
       const {
         itemId,

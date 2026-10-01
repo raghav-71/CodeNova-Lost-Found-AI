@@ -1,5 +1,6 @@
 import express from 'express';
 import cors from 'cors';
+import helmet from 'helmet';
 import path from 'path';
 import fs from 'fs';
 import dotenv from 'dotenv';
@@ -8,6 +9,8 @@ import { createItemsRouter } from './routes/items.js';
 import { createClaimsRouter } from './routes/claims.js';
 import { createNotificationsRouter } from './routes/notifications.js';
 import { createStatsRouter } from './routes/stats.js';
+import { createAdminRouter } from './routes/admin.js';
+import { generalLimiter } from './middleware/rateLimiters.js';
 
 dotenv.config({ path: path.resolve(process.cwd(), '../.env') });
 dotenv.config();
@@ -25,36 +28,68 @@ const allowedOrigins = isProduction
   ? rawAllowedOrigins
   : [...new Set([...rawAllowedOrigins, 'http://localhost:5173', 'http://127.0.0.1:5173', 'http://localhost:3000'])];
 
-// Middleware
+// Hide server identification
+app.disable('x-powered-by');
+
+// 1. Security Headers Middleware (Helmet)
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'"],
+      styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
+      fontSrc: ["'self'", 'https://fonts.gstatic.com'],
+      imgSrc: ["'self'", 'data:', 'blob:', 'https:', 'http:'],
+      connectSrc: ["'self'", 'https:', 'http:', 'ws:', 'wss:'],
+      objectSrc: ["'none'"],
+      upgradeInsecureRequests: isProduction ? [] : null
+    }
+  },
+  crossOriginEmbedderPolicy: false,
+  crossOriginResourcePolicy: { policy: 'cross-origin' }
+}));
+
+// 2. Strict Production CORS Middleware
 app.use(cors({
   origin: (origin, callback) => {
-    // Allow requests with no origin (like health checks, server-to-server, mobile native calls)
+    // Allow non-browser requests without origin (health checks, server-to-server)
     if (!origin) return callback(null, true);
     
     if (allowedOrigins.includes(origin) || (!isProduction && origin.includes('localhost'))) {
       return callback(null, true);
     }
     
-    // Optionally allow Vercel preview domains if enabled
+    // Optionally allow Vercel preview domains if explicitly configured
     if (origin.endsWith('.vercel.app') && process.env.ALLOW_VERCEL_PREVIEWS === 'true') {
       return callback(null, true);
     }
     
-    return callback(new Error(`CORS blocked for origin: ${origin}`));
+    // Reject unauthorized cross-origin request gracefully without exposing server stack
+    return callback(null, false);
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
 }));
-app.use(express.json({ limit: '50mb' }));
-app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
-// Static uploads directory
+// 3. Request Payload Size Limits
+app.use(express.json({ limit: '15mb' }));
+app.use(express.urlencoded({ extended: true, limit: '15mb' }));
+
+// 4. Rate Limiting on API endpoints
+app.use('/api', generalLimiter);
+
+// Static uploads directory (safe read-only serving)
 const uploadDir = path.resolve(process.cwd(), 'uploads');
 if (!fs.existsSync(uploadDir)) {
   fs.mkdirSync(uploadDir, { recursive: true });
 }
-app.use('/uploads', express.static(uploadDir));
+app.use('/uploads', express.static(uploadDir, {
+  dotfiles: 'ignore',
+  etag: true,
+  index: false,
+  maxAge: '1d'
+}));
 
 // Root endpoint
 app.get('/', (_req, res) => {
@@ -67,7 +102,8 @@ app.get('/', (_req, res) => {
       items: '/api/items',
       claims: '/api/claims',
       notifications: '/api/notifications',
-      stats: '/api/stats'
+      stats: '/api/stats',
+      admin: '/api/admin'
     }
   });
 });
@@ -89,13 +125,18 @@ app.use('/api/items', createItemsRouter());
 app.use('/api/claims', createClaimsRouter());
 app.use('/api/notifications', createNotificationsRouter());
 app.use('/api/stats', createStatsRouter());
+app.use('/api/admin', createAdminRouter());
 
-// Global Error Handler
+// 5. Global Production Error Handler (Debug mode off in production)
 app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
-  console.error('Unhandled server error:', err);
-  res.status(500).json({
-    error: 'Something went wrong on the server. Please try again.',
-    details: process.env.NODE_ENV === 'development' ? err.message : undefined
+  console.error('Server error occurred:', isProduction ? err.message : err);
+  
+  if (err.message && err.message.includes('Only JPEG, PNG, and WebP')) {
+    return res.status(400).json({ error: err.message });
+  }
+
+  return res.status(500).json({
+    error: 'An unexpected error occurred. Please try again later.'
   });
 });
 
@@ -105,6 +146,7 @@ async function startServer() {
       console.log(`====================================================`);
       console.log(`🚀 FindIt AI Server running on http://localhost:${PORT}`);
       console.log(`🔐 Supabase Auth & PostgreSQL Data Layer Active`);
+      console.log(`🛡️  Security Headers & Rate Limiting Enabled`);
       console.log(`====================================================`);
     });
   } catch (error) {

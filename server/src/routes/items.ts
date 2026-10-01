@@ -7,10 +7,29 @@ import { supabaseDb, ItemRecord } from '../db/supabaseDb.js';
 import { AuthenticatedRequest, authenticateToken, optionalAuthenticateToken } from '../middleware/auth.js';
 import { aiMatchingService } from '../services/aiMatcher.js';
 import { supabaseAdmin, isSupabaseServerConfigured } from '../services/supabase.js';
+import { aiLimiter, itemCreationLimiter } from '../middleware/rateLimiters.js';
+import { validateItem, validateAISearch, sanitizeString } from '../middleware/validation.js';
 
 const uploadDir = path.resolve(process.cwd(), 'uploads');
 if (!fs.existsSync(uploadDir)) {
   fs.mkdirSync(uploadDir, { recursive: true });
+}
+
+const ALLOWED_EXTENSIONS = new Set(['.jpg', '.jpeg', '.png', '.webp']);
+
+function isValidImageMagicBytes(buffer: Buffer): boolean {
+  if (buffer.length < 4) return false;
+  // JPEG: FF D8 FF
+  if (buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) return true;
+  // PNG: 89 50 4E 47
+  if (buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4e && buffer[3] === 0x47) return true;
+  // WebP: RIFF (bytes 0-3) and WEBP (bytes 8-11)
+  if (buffer.length >= 12 &&
+      buffer[0] === 0x52 && buffer[1] === 0x49 && buffer[2] === 0x46 && buffer[3] === 0x46 &&
+      buffer[8] === 0x57 && buffer[9] === 0x45 && buffer[10] === 0x42 && buffer[11] === 0x50) {
+    return true;
+  }
+  return false;
 }
 
 const storage = multer.diskStorage({
@@ -18,8 +37,9 @@ const storage = multer.diskStorage({
     cb(null, uploadDir);
   },
   filename: (_req, file, cb) => {
-    const ext = path.extname(file.originalname).toLowerCase() || '.jpg';
-    const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
+    const rawExt = path.extname(path.basename(file.originalname)).toLowerCase();
+    const ext = ALLOWED_EXTENSIONS.has(rawExt) ? rawExt : '.jpg';
+    const uniqueSuffix = `${Date.now()}-${crypto.randomUUID()}`;
     cb(null, `item-${uniqueSuffix}${ext}`);
   }
 });
@@ -28,9 +48,10 @@ const upload = multer({
   storage,
   limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
   fileFilter: (_req, file, cb) => {
-    const allowed = /jpeg|jpg|png|webp/i;
-    const isMimeValid = allowed.test(file.mimetype);
-    const isExtValid = allowed.test(path.extname(file.originalname));
+    const allowedMime = /^image\/(jpeg|png|webp)$/i;
+    const isMimeValid = allowedMime.test(file.mimetype);
+    const rawExt = path.extname(path.basename(file.originalname)).toLowerCase();
+    const isExtValid = ALLOWED_EXTENSIONS.has(rawExt);
     if (isMimeValid && isExtValid) {
       return cb(null, true);
     }
@@ -42,7 +63,7 @@ export function createItemsRouter(): Router {
   const router = Router();
 
   // Natural Language AI Search
-  router.post('/ai-search', optionalAuthenticateToken, async (req: AuthenticatedRequest, res: Response) => {
+  router.post('/ai-search', aiLimiter, validateAISearch, optionalAuthenticateToken, async (req: AuthenticatedRequest, res: Response) => {
     try {
       const { query, type = 'ALL', imageBase64 } = req.body;
       if (!query || String(query).trim().length === 0) {
@@ -151,13 +172,22 @@ export function createItemsRouter(): Router {
   });
 
   // Real-time Multimodal Image Verification & Cross-Validation
-  router.post('/verify-image', optionalAuthenticateToken, upload.single('image'), async (req: AuthenticatedRequest, res: Response) => {
+  router.post('/verify-image', aiLimiter, optionalAuthenticateToken, upload.single('image'), async (req: AuthenticatedRequest, res: Response) => {
     try {
       const { title = '', description = '', category = '', imageUrl, imageBase64 } = req.body;
 
       let filePath: string | undefined;
       if (req.file) {
         filePath = path.resolve(uploadDir, req.file.filename);
+        try {
+          const fileBuf = fs.readFileSync(filePath);
+          if (!isValidImageMagicBytes(fileBuf)) {
+            try { fs.unlinkSync(filePath); } catch {}
+            return res.status(400).json({ error: 'Uploaded file is not a valid JPEG, PNG, or WebP image.' });
+          }
+        } catch {
+          return res.status(400).json({ error: 'Failed to process uploaded file.' });
+        }
       }
 
       const hintText = `${title} ${description} ${category} ${req.file?.originalname || ''}`;
@@ -183,7 +213,7 @@ export function createItemsRouter(): Router {
   });
 
   // Create new Lost or Found item
-  router.post('/', authenticateToken, upload.single('image'), async (req: AuthenticatedRequest, res: Response) => {
+  router.post('/', itemCreationLimiter, authenticateToken, upload.single('image'), validateItem, async (req: AuthenticatedRequest, res: Response) => {
     try {
       const {
         type,
@@ -229,11 +259,17 @@ export function createItemsRouter(): Router {
 
       if (req.file) {
         uploadedFilePath = path.resolve(uploadDir, req.file.filename);
-        if (isSupabaseServerConfigured) {
-          try {
-            const ext = path.extname(req.file.originalname).toLowerCase() || '.jpg';
-            const storagePath = `items/item-${Date.now()}-${Math.random().toString(36).substring(2, 9)}${ext}`;
-            const fileBuffer = fs.readFileSync(uploadedFilePath);
+        try {
+          const fileBuffer = fs.readFileSync(uploadedFilePath);
+          if (!isValidImageMagicBytes(fileBuffer)) {
+            try { fs.unlinkSync(uploadedFilePath); } catch {}
+            return res.status(400).json({ error: 'Uploaded file is not a valid JPEG, PNG, or WebP image.' });
+          }
+
+          if (isSupabaseServerConfigured) {
+            const rawExt = path.extname(path.basename(req.file.originalname)).toLowerCase();
+            const ext = ALLOWED_EXTENSIONS.has(rawExt) ? rawExt : '.jpg';
+            const storagePath = `items/item-${Date.now()}-${crypto.randomUUID()}${ext}`;
             const { error: uploadError } = await supabaseAdmin.storage
               .from('item-images')
               .upload(storagePath, fileBuffer, {
@@ -243,13 +279,14 @@ export function createItemsRouter(): Router {
             if (!uploadError) {
               const { data: pubData } = supabaseAdmin.storage.from('item-images').getPublicUrl(storagePath);
               primaryImage = pubData.publicUrl;
+              try { fs.unlinkSync(uploadedFilePath); } catch {}
             } else {
               primaryImage = `/uploads/${req.file.filename}`;
             }
-          } catch {
+          } else {
             primaryImage = `/uploads/${req.file.filename}`;
           }
-        } else {
+        } catch {
           primaryImage = `/uploads/${req.file.filename}`;
         }
       } else if (imageUrl && typeof imageUrl === 'string' && imageUrl.trim().length > 0) {
@@ -335,7 +372,7 @@ export function createItemsRouter(): Router {
   });
 
   // Update item
-  router.put('/:id', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
+  router.put('/:id', authenticateToken, validateItem, async (req: AuthenticatedRequest, res: Response) => {
     try {
       const { id } = req.params;
       const { title, description, category, location, building_zone, date, time, status, characteristics } = req.body;
@@ -394,7 +431,7 @@ export function createItemsRouter(): Router {
   });
 
   // Re-run matching pipeline on demand
-  router.post('/:id/rematch', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
+  router.post('/:id/rematch', aiLimiter, authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
     try {
       const { id } = req.params;
       const item = await supabaseDb.getItemById(id);

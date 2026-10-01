@@ -105,6 +105,20 @@ export async function verifySupabaseToken(token: string): Promise<SupabaseUserPr
       user.user_metadata?.phone || 
       '';
 
+    // Authoritative Admin Role Verification:
+    // Only app_metadata (service-role controlled), profiles.role, or server-configured ADMIN_EMAILS can assign 'admin'.
+    // User-controlled user_metadata or request headers can NEVER escalate privileges.
+    const adminEmails = (process.env.ADMIN_EMAILS || '')
+      .split(',')
+      .map(e => e.trim().toLowerCase())
+      .filter(Boolean);
+    const userEmail = (user.email || '').toLowerCase();
+    const isAdmin = Boolean(
+      (user.app_metadata && user.app_metadata.role === 'admin') ||
+      (profileData && profileData.role === 'admin') ||
+      (userEmail && adminEmails.includes(userEmail))
+    );
+
     return {
       id: user.id,
       email: user.email || '',
@@ -112,7 +126,7 @@ export async function verifySupabaseToken(token: string): Promise<SupabaseUserPr
       campus,
       avatar,
       phone,
-      role: 'student'
+      role: isAdmin ? 'admin' : 'student'
     };
   } catch (err) {
     console.warn('Supabase token verification encountered an error:', err);
