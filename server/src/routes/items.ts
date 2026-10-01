@@ -6,6 +6,7 @@ import crypto from 'crypto';
 import { supabaseDb, ItemRecord } from '../db/supabaseDb.js';
 import { AuthenticatedRequest, authenticateToken, optionalAuthenticateToken } from '../middleware/auth.js';
 import { aiMatchingService } from '../services/aiMatcher.js';
+import { supabaseAdmin, isSupabaseServerConfigured } from '../services/supabase.js';
 
 const uploadDir = path.resolve(process.cwd(), 'uploads');
 if (!fs.existsSync(uploadDir)) {
@@ -227,8 +228,30 @@ export function createItemsRouter(): Router {
       let uploadedFilePath: string | undefined;
 
       if (req.file) {
-        primaryImage = `/uploads/${req.file.filename}`;
         uploadedFilePath = path.resolve(uploadDir, req.file.filename);
+        if (isSupabaseServerConfigured) {
+          try {
+            const ext = path.extname(req.file.originalname).toLowerCase() || '.jpg';
+            const storagePath = `items/item-${Date.now()}-${Math.random().toString(36).substring(2, 9)}${ext}`;
+            const fileBuffer = fs.readFileSync(uploadedFilePath);
+            const { error: uploadError } = await supabaseAdmin.storage
+              .from('item-images')
+              .upload(storagePath, fileBuffer, {
+                contentType: req.file.mimetype,
+                upsert: true
+              });
+            if (!uploadError) {
+              const { data: pubData } = supabaseAdmin.storage.from('item-images').getPublicUrl(storagePath);
+              primaryImage = pubData.publicUrl;
+            } else {
+              primaryImage = `/uploads/${req.file.filename}`;
+            }
+          } catch {
+            primaryImage = `/uploads/${req.file.filename}`;
+          }
+        } else {
+          primaryImage = `/uploads/${req.file.filename}`;
+        }
       } else if (imageUrl && typeof imageUrl === 'string' && imageUrl.trim().length > 0) {
         primaryImage = imageUrl.trim();
       } else {

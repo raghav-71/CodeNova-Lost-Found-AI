@@ -10,7 +10,7 @@ async function runPersistentAuthSuite() {
   let passed = 0;
   let failed = 0;
 
-  function assert(condition: boolean, testName: string, detail?: string) {
+  function assert(condition: any, testName: string, detail?: string) {
     if (condition) {
       console.log(`✅ [PASS] ${testName}`);
       if (detail) console.log(`   └─ ${detail}`);

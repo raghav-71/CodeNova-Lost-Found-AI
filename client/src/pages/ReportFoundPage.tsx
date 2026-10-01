@@ -17,7 +17,7 @@ import {
   FileText, 
   AlertCircle, 
   ArrowRight,
-  CheckCircle2
+  Camera
 } from 'lucide-react';
 
 const CATEGORIES: ItemCategory[] = [
@@ -69,8 +69,8 @@ export function ReportFoundPage() {
   const [detectedConsistency, setDetectedConsistency] = useState<ConsistencyCheckResult | null>(null);
 
   const handleImageChange = (file: File) => {
-    if (!file.type.match(/^image\/(jpeg|jpg|png|webp)$/i)) {
-      setError('Please upload a valid JPG, PNG, or WebP image.');
+    if (!file.type.match(/^image\/(jpeg|jpg|png|webp|heic|heif)$/i) && !file.type.startsWith('image/')) {
+      setError('Please upload a valid image file (JPG, PNG, WebP).');
       return;
     }
     if (file.size > 10 * 1024 * 1024) {
@@ -154,7 +154,7 @@ export function ReportFoundPage() {
 
     const finalLocation = location === 'Other Campus Location' ? customLocation.trim() : location;
     if (!finalLocation) {
-      setError('Please specify the campus location where the item was found.');
+      setError('Please specify the campus location.');
       return;
     }
 
@@ -185,7 +185,7 @@ export function ReportFoundPage() {
   };
 
   return (
-    <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div className="max-w-4xl mx-auto px-3.5 sm:px-6 lg:px-8 py-6 sm:py-8">
       <div className="space-y-6">
         {/* Header */}
         <div className="space-y-2">
@@ -196,12 +196,12 @@ export function ReportFoundPage() {
             Found an Item on Campus?
           </h1>
           <p className="text-xs sm:text-sm text-[#66756C] font-medium">
-            Log the item to reunite it with its student owner. FindIt AI will scan active lost reports and notify relevant owners.
+            Log the item details to help return it to its student owner. FindIt AI will immediately match against reported lost items.
           </p>
         </div>
 
-        {/* Step Indicator Header */}
-        <div className="grid grid-cols-5 gap-2 p-3 bg-white border border-[#E3ECE6] rounded-2xl text-center text-xs font-bold shadow-sm">
+        {/* Step Indicator Header (Mobile-first responsive version) */}
+        <div className="hidden sm:grid sm:grid-cols-5 gap-2 p-3 bg-white border border-[#E3ECE6] rounded-2xl text-center text-xs font-bold shadow-sm">
           <div className="text-[#168A4A] bg-[#EEF8F1] py-1.5 rounded-xl border border-[#D5ECD9]">01 ITEM</div>
           <div className="text-[#168A4A] bg-[#EEF8F1] py-1.5 rounded-xl border border-[#D5ECD9]">02 DETAILS</div>
           <div className="text-[#168A4A] bg-[#EEF8F1] py-1.5 rounded-xl border border-[#D5ECD9]">03 LOCATION</div>
@@ -209,8 +209,17 @@ export function ReportFoundPage() {
           <div className="text-[#35B86B] bg-[#E6F7EC] py-1.5 rounded-xl border border-[#35B86B]/30 font-extrabold">05 SUBMIT</div>
         </div>
 
+        {/* Compact Mobile Step Badge */}
+        <div className="sm:hidden flex items-center justify-between p-3 bg-white border border-[#E3ECE6] rounded-2xl shadow-sm text-xs font-bold">
+          <span className="text-[#168A4A] flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full bg-[#35B86B]"></span>
+            Found Item Registration Form
+          </span>
+          <span className="text-[#66756C] text-[11px]">Protected & secure</span>
+        </div>
+
         {/* Form Container */}
-        <form onSubmit={handleSubmit} className="space-y-6">
+        <form onSubmit={handleSubmit} className="space-y-5 sm:space-y-6">
           {error && (
             <div className="p-4 rounded-2xl bg-[#FFF1F2] border border-[#FFE4E6] text-[#E11D48] text-xs flex items-center gap-2 font-medium">
               <AlertCircle className="w-5 h-5 shrink-0" />
@@ -219,23 +228,23 @@ export function ReportFoundPage() {
           )}
 
           {/* Section 1: Item Information */}
-          <div className="rounded-3xl bg-white border border-[#E3ECE6] p-6 sm:p-8 space-y-5 shadow-[0_10px_28px_-4px_rgba(22,138,74,0.06)]">
+          <div className="rounded-3xl bg-white border border-[#E3ECE6] p-4 sm:p-8 space-y-4 sm:space-y-5 shadow-[0_10px_28px_-4px_rgba(22,138,74,0.06)]">
             <h2 className="text-xs font-bold uppercase tracking-wider text-[#94A39B] flex items-center gap-2">
               <FileText className="w-4 h-4 text-[#35B86B]" />
-              <span>1. Found Item Details</span>
+              <span>1. Item Identification</span>
             </h2>
 
             {/* Title */}
             <div>
               <label className="block text-xs font-bold text-[#102018] mb-1.5">
-                Item Title / Description Name <span className="text-[#35B86B]">*</span>
+                Item Title / Model <span className="text-[#E11D48]">*</span>
               </label>
               <input
                 type="text"
                 required
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
-                placeholder="e.g. Dark Grey Apple MacBook or Brown Leather Wallet"
+                placeholder="e.g. AirPods Pro in white case or Student ID Card (John D.)"
                 className="w-full px-4 py-3 rounded-2xl bg-[#F7FBF8] border border-[#E3ECE6] text-[#102018] placeholder-[#94A39B] text-xs sm:text-sm font-medium focus:outline-none focus:border-[#35B86B] focus:ring-2 focus:ring-[#35B86B]/20"
               />
             </div>
@@ -243,7 +252,7 @@ export function ReportFoundPage() {
             {/* Category */}
             <div>
               <label className="block text-xs font-bold text-[#102018] mb-1.5">
-                Category <span className="text-[#35B86B]">*</span>
+                Category <span className="text-[#E11D48]">*</span>
               </label>
               <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
                 {CATEGORIES.map((cat) => (
@@ -251,7 +260,7 @@ export function ReportFoundPage() {
                     key={cat}
                     type="button"
                     onClick={() => setCategory(cat)}
-                    className={`py-2.5 px-3 rounded-xl text-xs font-bold border transition-all ${
+                    className={`py-2.5 px-3 rounded-xl text-xs font-bold border transition-all touch-target flex items-center justify-center ${
                       category === cat
                         ? 'bg-[#EEF8F1] text-[#168A4A] border-[#35B86B] shadow-sm'
                         : 'bg-[#F7FBF8] text-[#66756C] hover:text-[#102018] border-[#E3ECE6]'
@@ -266,44 +275,44 @@ export function ReportFoundPage() {
             {/* Description */}
             <div>
               <label className="block text-xs font-bold text-[#102018] mb-1.5">
-                Description of Found Item <span className="text-[#35B86B]">*</span>
+                Detailed Description <span className="text-[#E11D48]">*</span>
               </label>
               <textarea
                 rows={4}
                 required
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
-                placeholder="Describe where the item was situated, general physical condition, brand, color..."
+                placeholder="Describe color, brand, model, condition, and where you placed it safely..."
                 className="w-full px-4 py-3 rounded-2xl bg-[#F7FBF8] border border-[#E3ECE6] text-[#102018] placeholder-[#94A39B] text-xs sm:text-sm font-medium focus:outline-none focus:border-[#35B86B] focus:ring-2 focus:ring-[#35B86B]/20 resize-none"
               />
             </div>
 
-            {/* Holding Location */}
+            {/* Distinctive Characteristics */}
             <div>
               <label className="block text-xs font-bold text-[#102018] mb-1.5">
-                Current Holding / Security Location (e.g., Handed to Library Reception)
+                Distinctive Identifying Marks (Crucial for AI Matching)
               </label>
               <input
                 type="text"
                 value={characteristics}
                 onChange={(e) => setCharacteristics(e.target.value)}
-                placeholder="e.g. Deposited at Library Front Desk, or Kept with Student Center Security"
+                placeholder="e.g. Purple silicone lanyard, small initials scratched inside case"
                 className="w-full px-4 py-3 rounded-2xl bg-[#F7FBF8] border border-[#E3ECE6] text-[#102018] placeholder-[#94A39B] text-xs sm:text-sm font-medium focus:outline-none focus:border-[#35B86B] focus:ring-2 focus:ring-[#35B86B]/20"
               />
             </div>
           </div>
 
-          {/* Section 2: Location and Timeline */}
-          <div className="rounded-3xl bg-white border border-[#E3ECE6] p-6 sm:p-8 space-y-5 shadow-[0_10px_28px_-4px_rgba(22,138,74,0.06)]">
+          {/* Section 2: Location and Timeline (Single column on mobile) */}
+          <div className="rounded-3xl bg-white border border-[#E3ECE6] p-4 sm:p-8 space-y-4 sm:space-y-5 shadow-[0_10px_28px_-4px_rgba(22,138,74,0.06)]">
             <h2 className="text-xs font-bold uppercase tracking-wider text-[#94A39B] flex items-center gap-2">
               <MapPin className="w-4 h-4 text-[#35B86B]" />
-              <span>2. Found Location & Timestamp</span>
+              <span>2. Campus Location & Finding Timeline</span>
             </h2>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="block text-xs font-bold text-[#102018] mb-1.5">
-                  Campus Facility / Area Found <span className="text-[#35B86B]">*</span>
+                  Campus Facility / Area <span className="text-[#E11D48]">*</span>
                 </label>
                 <select
                   value={location}
@@ -320,13 +329,13 @@ export function ReportFoundPage() {
 
               <div>
                 <label className="block text-xs font-bold text-[#102018] mb-1.5">
-                  Specific Zone / Floor / Desk
+                  Specific Zone / Floor / Room
                 </label>
                 <input
                   type="text"
                   value={buildingZone}
                   onChange={(e) => setBuildingZone(e.target.value)}
-                  placeholder="e.g. 3rd Floor Study Pod Area or Near Cafeteria Booth 4"
+                  placeholder="e.g. Bench outside Cafeteria entrance"
                   className="w-full px-4 py-3 rounded-2xl bg-[#F7FBF8] border border-[#E3ECE6] text-[#102018] placeholder-[#94A39B] text-xs sm:text-sm font-medium focus:outline-none focus:border-[#35B86B]"
                 />
               </div>
@@ -334,7 +343,7 @@ export function ReportFoundPage() {
               {location === 'Other Campus Location' && (
                 <div className="sm:col-span-2">
                   <label className="block text-xs font-bold text-[#102018] mb-1.5">
-                    Custom Location <span className="text-[#35B86B]">*</span>
+                    Custom Location Name <span className="text-[#E11D48]">*</span>
                   </label>
                   <input
                     type="text"
@@ -349,7 +358,7 @@ export function ReportFoundPage() {
 
               <div>
                 <label className="block text-xs font-bold text-[#102018] mb-1.5">
-                  Date Found <span className="text-[#35B86B]">*</span>
+                  Date Found <span className="text-[#E11D48]">*</span>
                 </label>
                 <input
                   type="date"
@@ -362,7 +371,7 @@ export function ReportFoundPage() {
 
               <div>
                 <label className="block text-xs font-bold text-[#102018] mb-1.5">
-                  Time Found (Optional)
+                  Approximate Time (Optional)
                 </label>
                 <input
                   type="time"
@@ -374,11 +383,11 @@ export function ReportFoundPage() {
             </div>
           </div>
 
-          {/* Section 3: Image Upload */}
-          <div className="rounded-3xl bg-white border border-[#E3ECE6] p-6 sm:p-8 space-y-5 shadow-[0_10px_28px_-4px_rgba(22,138,74,0.06)]">
+          {/* Section 3: Image Upload (Mobile Camera + Photo Library supported) */}
+          <div className="rounded-3xl bg-white border border-[#E3ECE6] p-4 sm:p-8 space-y-4 sm:space-y-5 shadow-[0_10px_28px_-4px_rgba(22,138,74,0.06)]">
             <h2 className="text-xs font-bold uppercase tracking-wider text-[#94A39B] flex items-center gap-2">
               <ImageIcon className="w-4 h-4 text-[#35B86B]" />
-              <span>3. Photograph of Found Item</span>
+              <span>3. Image & Photo Reference</span>
             </h2>
 
             {imagePreview ? (
@@ -390,23 +399,24 @@ export function ReportFoundPage() {
                     setImageFile(null);
                     setImagePreview(null);
                   }}
-                  className="absolute top-3 right-3 p-1.5 rounded-full bg-white/90 hover:bg-[#E11D48] hover:text-white text-[#102018] transition-colors shadow-sm"
+                  className="absolute top-3 right-3 w-10 h-10 rounded-full bg-white/95 hover:bg-[#E11D48] hover:text-white text-[#102018] transition-colors shadow-md flex items-center justify-center touch-target"
+                  aria-label="Remove photo"
                 >
-                  <X className="w-4 h-4" />
+                  <X className="w-5 h-5" />
                 </button>
               </div>
             ) : (
-              <label className="border-2 border-dashed border-[#C7EED4] hover:border-[#35B86B] rounded-3xl p-8 flex flex-col items-center justify-center cursor-pointer bg-[#F7FBF8] hover:bg-[#EEF8F1] transition-all group">
+              <label className="border-2 border-dashed border-[#C7EED4] hover:border-[#35B86B] rounded-3xl p-6 sm:p-8 flex flex-col items-center justify-center cursor-pointer bg-[#F7FBF8] hover:bg-[#EEF8F1] transition-all group">
                 <div className="w-12 h-12 rounded-2xl bg-white text-[#35B86B] border border-[#D5ECD9] flex items-center justify-center mb-3 shadow-sm group-hover:scale-110 transition-transform">
-                  <Upload className="w-6 h-6" />
+                  <Camera className="w-6 h-6" />
                 </div>
-                <div className="text-sm font-bold text-[#102018] text-center">
-                  Drag & drop item photo, or <span className="text-[#168A4A] underline">browse files</span>
+                <div className="text-xs sm:text-sm font-bold text-[#102018] text-center">
+                  Take photo with camera or <span className="text-[#168A4A] underline">browse files</span>
                 </div>
-                <div className="text-xs text-[#66756C] mt-1 font-medium">Supports JPG, PNG, WebP up to 10MB</div>
+                <div className="text-[11px] sm:text-xs text-[#66756C] mt-1 font-medium">Supports JPG, PNG, WebP up to 10MB</div>
                 <input
                   type="file"
-                  accept="image/jpeg,image/png,image/webp"
+                  accept="image/jpeg,image/png,image/webp,image/*"
                   onChange={(e) => {
                     if (e.target.files && e.target.files[0]) {
                       handleImageChange(e.target.files[0]);
@@ -423,12 +433,12 @@ export function ReportFoundPage() {
             <button
               type="submit"
               disabled={isSubmitting}
-              className="btn-primary w-full py-4 text-sm font-bold flex items-center justify-center gap-2 shadow-lg shadow-[#35B86B]/30 disabled:opacity-50"
+              className="btn-primary w-full py-4 text-sm font-bold flex items-center justify-center gap-2 shadow-lg shadow-[#35B86B]/30 disabled:opacity-50 touch-target"
             >
               {isSubmitting ? (
                 <div className="flex items-center gap-2">
                   <Sparkles className="w-5 h-5 animate-spin" />
-                  <span>Logging Found Item & Triggering AI Matching Engine...</span>
+                  <span>Publishing Report & Scanning AI Matches...</span>
                 </div>
               ) : (
                 <div className="flex items-center gap-2">

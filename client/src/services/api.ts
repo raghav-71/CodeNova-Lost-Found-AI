@@ -1,12 +1,26 @@
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+import { supabase, isSupabaseConfigured } from './supabase.js';
+
+export const API_BASE_URL = import.meta.env.VITE_API_URL 
+  ? import.meta.env.VITE_API_URL.replace(/\/+$/, '') 
+  : (import.meta.env.PROD ? '/api' : 'http://localhost:5000/api');
 
 class ApiClient {
-  private getToken(): string | null {
+  private async getToken(): Promise<string | null> {
+    if (isSupabaseConfigured) {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.access_token) {
+          return session.access_token;
+        }
+      } catch {
+        // fallback
+      }
+    }
     return localStorage.getItem('findit_auth_token');
   }
 
   private async request<T = any>(endpoint: string, options: RequestInit = {}): Promise<T> {
-    const token = this.getToken();
+    const token = await this.getToken();
     const headers: Record<string, string> = {
       ...(options.headers as Record<string, string> || {}),
     };
@@ -240,4 +254,3 @@ class ApiClient {
 }
 
 export const api = new ApiClient();
-export { API_BASE_URL };

@@ -45,7 +45,7 @@ export function App() {
         <AuthProvider>
           <div className="min-h-screen flex flex-col bg-[#F7FBF8] text-[#102018] selection:bg-brand-500 selection:text-white font-sans antialiased">
             <Navbar />
-            <main className="flex-1">
+            <main className="flex-1 pb-20 md:pb-0">
               <Routes>
                 {/* Public Routes */}
                 <Route path="/" element={<LandingPage />} />

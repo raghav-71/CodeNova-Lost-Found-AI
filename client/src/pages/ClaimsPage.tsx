@@ -11,7 +11,10 @@ import {
   ArrowUpRight, 
   Check, 
   Lock, 
-  Inbox
+  Inbox,
+  Clock,
+  CheckCircle2,
+  XCircle
 } from 'lucide-react';
 
 export function ClaimsPage() {
@@ -82,13 +85,13 @@ export function ClaimsPage() {
   };
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
+    <div className="max-w-7xl mx-auto px-3.5 sm:px-6 lg:px-8 py-6 sm:py-8 space-y-6">
       {/* Header */}
       <div>
         <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#EEF8F1] border border-[#D5ECD9] text-[#168A4A] text-xs font-bold uppercase tracking-wide mb-2">
           <span>Verification & Claims Hub</span>
         </div>
-        <h1 className="text-2xl sm:text-3xl font-extrabold text-[#102018] tracking-tight">
+        <h1 className="text-xl sm:text-3xl font-extrabold text-[#102018] tracking-tight">
           Campus Ownership Claims
         </h1>
         <p className="text-xs sm:text-sm text-[#66756C] mt-1 font-medium">
@@ -96,29 +99,29 @@ export function ClaimsPage() {
         </p>
       </div>
 
-      {/* Tabs */}
-      <div className="flex items-center gap-2 border-b border-[#E3ECE6] pb-4">
+      {/* Tabs (Mobile-friendly horizontal scroll) */}
+      <div className="flex items-center gap-2 overflow-x-auto no-scrollbar border-b border-[#E3ECE6] pb-3">
         <button
           onClick={() => setActiveTab('received')}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs sm:text-sm font-bold transition-all ${
+          className={`shrink-0 flex items-center gap-2 px-3.5 sm:px-4 py-2.5 rounded-2xl text-xs sm:text-sm font-bold transition-all touch-target ${
             activeTab === 'received'
               ? 'bg-[#35B86B] text-white shadow-md shadow-[#35B86B]/25'
               : 'text-[#66756C] hover:text-[#102018] bg-white border border-[#E3ECE6]'
           }`}
         >
           <Inbox className="w-4 h-4" />
-          <span>Claims Received on My Items ({receivedClaims.length})</span>
+          <span>Claims Received ({receivedClaims.length})</span>
         </button>
         <button
           onClick={() => setActiveTab('submitted')}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs sm:text-sm font-bold transition-all ${
+          className={`shrink-0 flex items-center gap-2 px-3.5 sm:px-4 py-2.5 rounded-2xl text-xs sm:text-sm font-bold transition-all touch-target ${
             activeTab === 'submitted'
               ? 'bg-[#35B86B] text-white shadow-md shadow-[#35B86B]/25'
               : 'text-[#66756C] hover:text-[#102018] bg-white border border-[#E3ECE6]'
           }`}
         >
           <FileText className="w-4 h-4" />
-          <span>Claims I Submitted ({myClaims.length})</span>
+          <span>My Claims ({myClaims.length})</span>
         </button>
       </div>
 
@@ -127,112 +130,82 @@ export function ClaimsPage() {
         <div className="p-12 text-center text-xs text-[#66756C]">Loading claims...</div>
       ) : activeTab === 'received' ? (
         receivedClaims.length === 0 ? (
-          <div className="rounded-3xl bg-white border border-[#E3ECE6] p-12 text-center space-y-4 shadow-sm">
-            <div className="w-14 h-14 rounded-2xl bg-[#EEF8F1] border border-[#D5ECD9] flex items-center justify-center mx-auto text-[#168A4A]">
-              <ShieldCheck className="w-7 h-7" />
+          <div className="rounded-3xl bg-white border border-[#E3ECE6] p-8 sm:p-12 text-center space-y-4 shadow-sm">
+            <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-[#EEF8F1] border border-[#D5ECD9] flex items-center justify-center mx-auto text-[#168A4A]">
+              <ShieldCheck className="w-6 h-6 sm:w-7 sm:h-7" />
             </div>
-            <h3 className="text-base font-bold text-[#102018]">No claims received yet</h3>
+            <h3 className="text-base font-bold text-[#102018]">No verification claims received</h3>
             <p className="text-xs text-[#66756C] max-w-sm mx-auto font-medium">
-              When other campus members believe an item you found belongs to them, their verification details will appear here.
+              Whenever a student files an ownership claim on items you reported, their verification questionnaire will appear here.
             </p>
           </div>
         ) : (
-          <div className="space-y-6">
-            {receivedClaims.map((c) => (
+          <div className="space-y-4">
+            {receivedClaims.map((claim) => (
               <div
-                key={c.id}
-                className="rounded-3xl bg-white border border-[#E3ECE6] p-6 sm:p-8 shadow-[0_10px_28px_-4px_rgba(22,138,74,0.06)] space-y-5"
+                key={claim.id}
+                className="rounded-3xl bg-white border border-[#E3ECE6] p-4 sm:p-6 space-y-4 shadow-sm"
               >
-                {/* Header Info */}
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-[#E3ECE6]">
-                  <div className="flex items-center gap-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-[#E3ECE6]">
+                  <div className="flex items-center gap-3">
                     <img
-                      src={getImageUrl(c.item_image)}
-                      alt={c.item_title}
-                      className="w-14 h-14 rounded-2xl object-cover bg-[#EEF8F1] border border-[#E3ECE6] shrink-0"
+                      src={claim.claimant_avatar || `https://api.dicebear.com/7.x/bottts/svg?seed=${claim.claimant_name}`}
+                      alt={claim.claimant_name}
+                      className="w-10 h-10 rounded-xl object-cover border border-[#E3ECE6] bg-[#EEF8F1] shrink-0"
                     />
                     <div>
-                      <span className="text-[10px] font-bold text-[#94A39B] uppercase">Item Claimed:</span>
-                      <h3 className="text-base font-bold text-[#102018]">{c.item_title}</h3>
-                      <Link
-                        to={`/items/${c.item_id}`}
-                        className="text-xs font-bold text-[#168A4A] hover:text-[#116B3A] flex items-center gap-1 mt-0.5"
-                      >
-                        <span>View Item Record</span>
-                        <ArrowUpRight className="w-3.5 h-3.5" />
-                      </Link>
+                      <div className="font-bold text-sm text-[#102018]">{claim.claimant_name}</div>
+                      <div className="text-[11px] text-[#168A4A] font-semibold">{claim.claimant_campus}</div>
                     </div>
                   </div>
 
-                  <span className={`px-3 py-1 rounded-full text-xs font-bold self-start sm:self-center ${
-                    c.status === 'APPROVED'
+                  <span className={`px-3 py-1 rounded-full text-xs font-bold self-start sm:self-auto ${
+                    claim.status === 'APPROVED'
                       ? 'bg-[#EEF8F1] text-[#168A4A] border border-[#D5ECD9]'
-                      : c.status === 'REJECTED'
+                      : claim.status === 'REJECTED'
                       ? 'bg-[#FFF1F2] text-[#E11D48] border border-[#FFE4E6]'
                       : 'bg-[#FEF3C7] text-[#92400E] border border-[#FDE68A]'
                   }`}>
-                    {c.status}
+                    {claim.status}
                   </span>
                 </div>
 
-                {/* Claimant Details */}
-                <div className="flex items-center gap-3 p-3 rounded-2xl bg-[#F7FBF8] border border-[#E3ECE6]">
-                  <img
-                    src={c.claimant_avatar || `https://api.dicebear.com/7.x/bottts/svg?seed=${c.claimant_name}`}
-                    alt={c.claimant_name}
-                    className="w-10 h-10 rounded-xl object-cover border border-[#E3ECE6]"
-                  />
+                {/* Claim details */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs bg-[#F7FBF8] p-3.5 sm:p-4 rounded-2xl border border-[#E3ECE6]">
                   <div>
-                    <div className="text-xs font-bold text-[#102018]">{c.claimant_name}</div>
-                    <div className="text-[11px] text-[#168A4A] font-semibold">{c.claimant_campus}</div>
+                    <span className="font-bold text-[#66756C]">Where Lost: </span>
+                    <span className="text-[#102018] font-medium break-words-anywhere">{claim.location_lost}</span>
                   </div>
-                </div>
-
-                {/* Verification Responses */}
-                <div className="p-4 rounded-2xl bg-[#F7FBF8] border border-[#E3ECE6] space-y-3 text-xs">
-                  <div className="font-bold text-[#102018] text-xs flex items-center gap-1.5">
-                    <Lock className="w-3.5 h-3.5 text-[#35B86B]" />
-                    <span>Claimant Verification Questionnaire Answers:</span>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
-                    <div>
-                      <span className="font-bold text-[#94A39B] block text-[11px]">Where Lost:</span>
-                      <span className="text-[#102018] font-medium">{c.location_lost}</span>
-                    </div>
-                    <div>
-                      <span className="font-bold text-[#94A39B] block text-[11px]">Date Lost:</span>
-                      <span className="text-[#102018] font-medium">{c.date_lost}</span>
-                    </div>
-                  </div>
-
                   <div>
-                    <span className="font-bold text-[#94A39B] block text-[11px]">Identifying Details:</span>
-                    <p className="text-[#2D3D34] mt-0.5 leading-relaxed font-medium">{c.identifying_details}</p>
+                    <span className="font-bold text-[#66756C]">Date Lost: </span>
+                    <span className="text-[#102018] font-medium">{claim.date_lost}</span>
                   </div>
-
-                  {c.proof_notes && (
-                    <div>
-                      <span className="font-bold text-[#94A39B] block text-[11px]">Proof / Notes:</span>
-                      <p className="text-[#2D3D34] mt-0.5 leading-relaxed font-medium">{c.proof_notes}</p>
+                  <div className="sm:col-span-2">
+                    <span className="font-bold text-[#66756C]">Identifying Details: </span>
+                    <span className="text-[#102018] font-medium break-words-anywhere">{claim.identifying_details}</span>
+                  </div>
+                  {claim.proof_notes && (
+                    <div className="sm:col-span-2">
+                      <span className="font-bold text-[#66756C]">Proof Notes: </span>
+                      <span className="text-[#102018] font-medium break-words-anywhere">{claim.proof_notes}</span>
                     </div>
                   )}
                 </div>
 
-                {/* Action Buttons */}
-                {c.status === 'PENDING' && (
-                  <div className="flex items-center justify-end gap-3 pt-2">
+                {/* Action Buttons if Pending */}
+                {claim.status === 'PENDING' && (
+                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-end gap-2 pt-2">
                     <button
-                      onClick={() => handleUpdateStatus(c.id, 'REJECTED')}
-                      className="px-4 py-2 rounded-xl text-xs font-bold bg-[#FFF1F2] hover:bg-[#FFE4E6] text-[#E11D48] border border-[#FFE4E6]"
+                      onClick={() => handleUpdateStatus(claim.id, 'REJECTED')}
+                      className="px-4 py-2.5 rounded-xl bg-[#FFF1F2] hover:bg-[#FFE4E6] text-[#E11D48] border border-[#FFE4E6] text-xs font-bold touch-target text-center"
                     >
                       Reject Claim
                     </button>
                     <button
-                      onClick={() => handleUpdateStatus(c.id, 'APPROVED')}
-                      className="btn-primary px-5 py-2 text-xs flex items-center gap-2"
+                      onClick={() => handleUpdateStatus(claim.id, 'APPROVED')}
+                      className="btn-primary px-5 py-2.5 text-xs flex items-center justify-center gap-1.5 touch-target text-center"
                     >
-                      <Check className="w-4 h-4" />
+                      <Check className="w-3.5 h-3.5" />
                       <span>Approve Claim & Resolve Item</span>
                     </button>
                   </div>
@@ -243,81 +216,40 @@ export function ClaimsPage() {
         )
       ) : (
         myClaims.length === 0 ? (
-          <div className="rounded-3xl bg-white border border-[#E3ECE6] p-12 text-center space-y-4 shadow-sm">
-            <div className="w-14 h-14 rounded-2xl bg-[#EEF8F1] border border-[#D5ECD9] flex items-center justify-center mx-auto text-[#168A4A]">
-              <FileText className="w-7 h-7" />
+          <div className="rounded-3xl bg-white border border-[#E3ECE6] p-8 sm:p-12 text-center space-y-4 shadow-sm">
+            <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-[#EEF8F1] border border-[#D5ECD9] flex items-center justify-center mx-auto text-[#168A4A]">
+              <FileText className="w-6 h-6 sm:w-7 sm:h-7" />
             </div>
-            <h3 className="text-base font-bold text-[#102018]">No claims submitted</h3>
+            <h3 className="text-base font-bold text-[#102018]">No submitted claims</h3>
             <p className="text-xs text-[#66756C] max-w-sm mx-auto font-medium">
-              If you discover an item in the directory that matches your lost property, submit a claim to initiate verification.
+              You haven't filed any ownership claims on campus items yet.
             </p>
-            <Link
-              to="/items"
-              className="btn-primary inline-flex items-center gap-1.5 px-4 py-2 text-xs"
-            >
-              <span>Browse Catalog</span>
-            </Link>
           </div>
         ) : (
           <div className="space-y-4">
-            {myClaims.map((c) => (
+            {myClaims.map((claim) => (
               <div
-                key={c.id}
-                className="rounded-3xl bg-white border border-[#E3ECE6] p-6 shadow-sm space-y-4"
+                key={claim.id}
+                className="rounded-3xl bg-white border border-[#E3ECE6] p-4 sm:p-6 space-y-3 shadow-sm"
               >
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                  <div className="flex items-center gap-4">
-                    <img
-                      src={getImageUrl(c.item_image)}
-                      alt={c.item_title}
-                      className="w-14 h-14 rounded-2xl object-cover bg-[#EEF8F1] border border-[#E3ECE6] shrink-0"
-                    />
-                    <div>
-                      <h3 className="text-base font-bold text-[#102018]">{c.item_title}</h3>
-                      <div className="text-xs text-[#66756C] flex items-center gap-2 mt-0.5 font-medium">
-                        <span>Reported by {c.reporter_name}</span>
-                        <span>•</span>
-                        <span>{c.item_location}</span>
-                      </div>
-                    </div>
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <span className="text-[10px] font-bold text-[#94A39B] uppercase">Submitted Claim</span>
+                    <h3 className="text-sm font-bold text-[#102018] mt-0.5">{claim.identifying_details}</h3>
                   </div>
-
-                  <span className={`px-3 py-1 rounded-full text-xs font-bold self-start sm:self-center ${
-                    c.status === 'APPROVED'
+                  <span className={`px-2.5 py-1 rounded-full text-xs font-bold shrink-0 ${
+                    claim.status === 'APPROVED'
                       ? 'bg-[#EEF8F1] text-[#168A4A] border border-[#D5ECD9]'
-                      : c.status === 'REJECTED'
+                      : claim.status === 'REJECTED'
                       ? 'bg-[#FFF1F2] text-[#E11D48] border border-[#FFE4E6]'
                       : 'bg-[#FEF3C7] text-[#92400E] border border-[#FDE68A]'
                   }`}>
-                    {c.status}
+                    {claim.status}
                   </span>
                 </div>
 
-                <div className="p-3.5 rounded-xl bg-[#F7FBF8] border border-[#E3ECE6] text-xs space-y-1 font-medium">
-                  <div>
-                    <span className="font-bold text-[#66756C]">My Stated Location: </span>
-                    <span className="text-[#102018]">{c.location_lost}</span>
-                  </div>
-                  <div>
-                    <span className="font-bold text-[#66756C]">Distinguishing Features Provided: </span>
-                    <span className="text-[#102018]">{c.identifying_details}</span>
-                  </div>
-                  {c.resolution_notes && (
-                    <div className="pt-2 border-t border-[#E3ECE6] text-[#168A4A]">
-                      <span className="font-bold">Finder Resolution Note: </span>
-                      <span>{c.resolution_notes}</span>
-                    </div>
-                  )}
-                </div>
-
-                <div className="flex justify-end pt-2">
-                  <Link
-                    to={`/items/${c.item_id}`}
-                    className="text-xs font-bold text-[#168A4A] hover:text-[#116B3A] flex items-center gap-1"
-                  >
-                    <span>View Item Record</span>
-                    <ArrowUpRight className="w-3.5 h-3.5" />
-                  </Link>
+                <div className="text-xs text-[#66756C]">
+                  Lost around <span className="font-semibold text-[#102018]">{claim.location_lost}</span> on <span className="font-semibold text-[#102018]">{claim.date_lost}</span>
                 </div>
               </div>
             ))}

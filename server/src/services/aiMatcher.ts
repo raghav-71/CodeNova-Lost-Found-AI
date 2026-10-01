@@ -1104,7 +1104,7 @@ Return strictly JSON matching this schema:
     const opposingType = targetItem.type === 'LOST' ? 'FOUND' : 'LOST';
     const targetNorm = this.normalizeItem(targetItem.description, targetItem.title, targetItem.category);
     
-    const candidates = supabaseDb.getAllActiveItemsForMatching(opposingType, targetItem.id);
+    const candidates = await supabaseDb.getAllActiveItemsForMatching(opposingType, targetItem.id);
     let createdCount = 0;
 
     for (const candidate of candidates) {

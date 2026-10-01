@@ -49,14 +49,14 @@ export function RegisterPage() {
   };
 
   return (
-    <div className="min-h-[85vh] flex items-center justify-center px-4 py-12">
-      <div className="w-full max-w-lg space-y-6">
+    <div className="min-h-[80vh] flex items-center justify-center px-3.5 sm:px-4 py-8 sm:py-12">
+      <div className="w-full max-w-lg space-y-5 sm:space-y-6">
         {/* Header */}
         <div className="text-center space-y-2">
           <div className="inline-flex items-center justify-center mb-1">
-            <img src="/logo.png" alt="FindIt AI" className="w-12 h-12 rounded-full shadow-sm object-cover border border-[#D5ECD9]" />
+            <img src="/logo.png" alt="FindIt AI" className="w-11 h-11 sm:w-12 sm:h-12 rounded-full shadow-sm object-cover border border-[#D5ECD9]" />
           </div>
-          <h2 className="text-2xl sm:text-3xl font-extrabold text-[#102018] tracking-tight">
+          <h2 className="text-xl sm:text-3xl font-extrabold text-[#102018] tracking-tight">
             Create Your Account
           </h2>
           <p className="text-xs text-[#66756C]">
@@ -65,7 +65,7 @@ export function RegisterPage() {
         </div>
 
         {/* Registration Card */}
-        <div className="rounded-3xl bg-white border border-[#E3ECE6] p-6 sm:p-8 card-3d">
+        <div className="rounded-3xl bg-white border border-[#E3ECE6] p-5 sm:p-8 card-3d">
           <form onSubmit={handleSubmit} className="space-y-4">
             {error && (
               <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs flex items-center gap-2">
@@ -196,7 +196,7 @@ export function RegisterPage() {
             <button
               type="submit"
               disabled={isLoading}
-              className="w-full mt-2 btn-primary flex items-center justify-center gap-2"
+              className="w-full mt-2 btn-primary flex items-center justify-center gap-2 py-3 sm:py-2.5 touch-target"
             >
               {isLoading ? (
                 <span>Creating Account...</span>

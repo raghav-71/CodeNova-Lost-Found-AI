@@ -47,7 +47,7 @@ export function DashboardPage() {
     if (!user) return;
     setIsLoading(true);
     try {
-      // 1. Fetch authenticated user's personal stats
+      // 1. Fetch authenticated user's personal stats from Supabase
       const userStatsRes = await api.getUserStats();
       if (userStatsRes.stats) {
         setStats(userStatsRes.stats);
@@ -96,127 +96,127 @@ export function DashboardPage() {
   if (!user) return null;
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+    <div className="max-w-7xl mx-auto px-3.5 sm:px-6 lg:px-8 py-6 sm:py-8 space-y-6 sm:space-y-8">
       {/* Top Personalized Greeting & Action Strip */}
-      <div className="rounded-3xl bg-white border border-[#E3ECE6] p-6 sm:p-8 shadow-[0_12px_32px_-4px_rgba(22,138,74,0.06),0_4px_10px_-2px_rgba(16,32,24,0.02)] space-y-6">
-        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-          <div className="space-y-1">
-            <h1 className="text-2xl sm:text-3xl font-extrabold text-[#102018] tracking-tight">
+      <div className="rounded-3xl bg-white border border-[#E3ECE6] p-5 sm:p-8 shadow-[0_10px_28px_-4px_rgba(22,138,74,0.06),0_4px_10px_-2px_rgba(16,32,24,0.02)] space-y-5">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+          <div className="space-y-1 min-w-0">
+            <h1 className="text-xl sm:text-2xl md:text-3xl font-extrabold text-[#102018] tracking-tight truncate">
               Welcome back, {user.name.split(' ')[0]} 👋
             </h1>
-            <p className="text-sm font-medium text-[#66756C]">
-              Let's find what you're looking for. • <span className="text-[#168A4A] font-bold">{user.campus || 'Central Campus'}</span>
+            <p className="text-xs sm:text-sm font-medium text-[#66756C] truncate">
+              Campus Hub • <span className="text-[#168A4A] font-bold">{user.campus || 'Central Campus'}</span>
             </p>
           </div>
 
           <Link
             to="/items"
-            className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold bg-[#F7FBF8] hover:bg-[#EEF8F1] text-[#168A4A] border border-[#D5ECD9] transition-all"
+            className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold bg-[#F7FBF8] hover:bg-[#EEF8F1] text-[#168A4A] border border-[#D5ECD9] transition-all touch-target"
           >
             <Search className="w-4 h-4 text-[#35B86B]" />
-            <span>Find an Item</span>
+            <span>Search Directory</span>
           </Link>
         </div>
 
         {/* Large Primary Action Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 pt-1">
           {/* Action Card: Report Lost */}
           <Link
             to="/report/lost"
-            className="group p-6 rounded-2xl bg-[#FFF8F8] hover:bg-[#FFF1F2] border border-[#FFE4E6] hover:border-[#FDA4AF] shadow-sm hover:shadow-md transition-all duration-300 flex items-center justify-between"
+            className="group p-4 sm:p-6 rounded-2xl bg-[#FFF8F8] hover:bg-[#FFF1F2] border border-[#FFE4E6] hover:border-[#FDA4AF] shadow-sm hover:shadow-md transition-all duration-300 flex items-center justify-between active:scale-[0.99]"
           >
-            <div className="space-y-1">
-              <div className="text-[11px] font-extrabold text-[#E11D48] uppercase tracking-wider">
+            <div className="space-y-1 pr-2">
+              <div className="text-[10px] sm:text-[11px] font-extrabold text-[#E11D48] uppercase tracking-wider">
                 Missing Belongings
               </div>
-              <div className="text-lg font-bold text-[#102018] group-hover:text-[#E11D48] transition-colors">
+              <div className="text-base sm:text-lg font-bold text-[#102018] group-hover:text-[#E11D48] transition-colors">
                 Report Lost Item
               </div>
-              <p className="text-xs text-[#66756C] font-medium">Log your item details & photo for AI matching</p>
+              <p className="text-xs text-[#66756C] font-medium line-clamp-1">AI searches campus records automatically</p>
             </div>
-            <div className="w-12 h-12 rounded-2xl bg-white text-[#E11D48] border border-[#FFE4E6] flex items-center justify-center shadow-sm group-hover:scale-110 transition-transform">
-              <PlusCircle className="w-6 h-6" />
+            <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-2xl bg-white text-[#E11D48] border border-[#FFE4E6] flex items-center justify-center shadow-sm shrink-0 group-hover:scale-110 transition-transform">
+              <PlusCircle className="w-5 h-5 sm:w-6 sm:h-6" />
             </div>
           </Link>
 
           {/* Action Card: Report Found */}
           <Link
             to="/report/found"
-            className="group p-6 rounded-2xl bg-[#EEF8F1] hover:bg-[#E6F7EC] border border-[#D5ECD9] hover:border-[#35B86B] shadow-sm hover:shadow-md transition-all duration-300 flex items-center justify-between"
+            className="group p-4 sm:p-6 rounded-2xl bg-[#EEF8F1] hover:bg-[#E6F7EC] border border-[#D5ECD9] hover:border-[#35B86B] shadow-sm hover:shadow-md transition-all duration-300 flex items-center justify-between active:scale-[0.99]"
           >
-            <div className="space-y-1">
-              <div className="text-[11px] font-extrabold text-[#168A4A] uppercase tracking-wider">
+            <div className="space-y-1 pr-2">
+              <div className="text-[10px] sm:text-[11px] font-extrabold text-[#168A4A] uppercase tracking-wider">
                 Help a Student
               </div>
-              <div className="text-lg font-bold text-[#102018] group-hover:text-[#168A4A] transition-colors">
+              <div className="text-base sm:text-lg font-bold text-[#102018] group-hover:text-[#168A4A] transition-colors">
                 Report Found Item
               </div>
-              <p className="text-xs text-[#66756C] font-medium">Log an item you picked up on campus</p>
+              <p className="text-xs text-[#66756C] font-medium line-clamp-1">Log an item you picked up on campus</p>
             </div>
-            <div className="w-12 h-12 rounded-2xl bg-white text-[#35B86B] border border-[#D5ECD9] flex items-center justify-center shadow-sm group-hover:scale-110 transition-transform">
-              <PlusCircle className="w-6 h-6" />
+            <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-2xl bg-white text-[#35B86B] border border-[#D5ECD9] flex items-center justify-center shadow-sm shrink-0 group-hover:scale-110 transition-transform">
+              <PlusCircle className="w-5 h-5 sm:w-6 sm:h-6" />
             </div>
           </Link>
         </div>
       </div>
 
-      {/* Personalized Statistics Row (Isolated to authenticated user's data) */}
+      {/* Personalized Statistics Row (Isolated to authenticated user's real Supabase data) */}
       {isLoading ? (
         <StatsSkeleton />
       ) : stats ? (
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className="p-5 rounded-2xl bg-white border border-[#E3ECE6] shadow-[0_8px_24px_-4px_rgba(22,138,74,0.06)] flex flex-col justify-between">
-            <div className="flex items-center justify-between text-[#66756C] text-xs font-bold">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+          <div className="p-4 sm:p-5 rounded-2xl bg-white border border-[#E3ECE6] shadow-[0_8px_24px_-4px_rgba(22,138,74,0.06)] flex flex-col justify-between">
+            <div className="flex items-center justify-between text-[#66756C] text-[11px] sm:text-xs font-bold">
               <span>My Lost Items</span>
-              <span className="w-2 h-2 rounded-full bg-[#E11D48]"></span>
+              <span className="w-2 h-2 rounded-full bg-[#E11D48] shrink-0"></span>
             </div>
-            <div className="text-3xl font-extrabold text-[#102018] mt-2">{stats.itemsLost}</div>
-            <div className="text-[11px] text-[#66756C] font-medium mt-1">Active searches</div>
+            <div className="text-2xl sm:text-3xl font-extrabold text-[#102018] mt-2">{stats.itemsLost}</div>
+            <div className="text-[10px] sm:text-[11px] text-[#66756C] font-medium mt-1 truncate">Active reports</div>
           </div>
 
-          <div className="p-5 rounded-2xl bg-white border border-[#E3ECE6] shadow-[0_8px_24px_-4px_rgba(22,138,74,0.06)] flex flex-col justify-between">
-            <div className="flex items-center justify-between text-[#66756C] text-xs font-bold">
+          <div className="p-4 sm:p-5 rounded-2xl bg-white border border-[#E3ECE6] shadow-[0_8px_24px_-4px_rgba(22,138,74,0.06)] flex flex-col justify-between">
+            <div className="flex items-center justify-between text-[#66756C] text-[11px] sm:text-xs font-bold">
               <span>My Found Items</span>
-              <span className="w-2 h-2 rounded-full bg-[#35B86B]"></span>
+              <span className="w-2 h-2 rounded-full bg-[#35B86B] shrink-0"></span>
             </div>
-            <div className="text-3xl font-extrabold text-[#102018] mt-2">{stats.itemsFound}</div>
-            <div className="text-[11px] text-[#66756C] font-medium mt-1">Logged by you</div>
+            <div className="text-2xl sm:text-3xl font-extrabold text-[#102018] mt-2">{stats.itemsFound}</div>
+            <div className="text-[10px] sm:text-[11px] text-[#66756C] font-medium mt-1 truncate">Logged by you</div>
           </div>
 
-          <div className="p-5 rounded-2xl bg-gradient-to-b from-white to-[#EEF8F1] border border-[#D5ECD9] shadow-[0_8px_24px_-4px_rgba(22,138,74,0.08)] flex flex-col justify-between">
-            <div className="flex items-center justify-between text-[#168A4A] text-xs font-extrabold">
+          <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-b from-white to-[#EEF8F1] border border-[#D5ECD9] shadow-[0_8px_24px_-4px_rgba(22,138,74,0.08)] flex flex-col justify-between">
+            <div className="flex items-center justify-between text-[#168A4A] text-[11px] sm:text-xs font-extrabold">
               <span>Potential Matches</span>
-              <Sparkles className="w-4 h-4 text-[#35B86B]" />
+              <Sparkles className="w-3.5 h-3.5 text-[#35B86B] shrink-0" />
             </div>
-            <div className="text-3xl font-extrabold text-[#168A4A] mt-2">{stats.potentialMatches}</div>
-            <div className="text-[11px] text-[#168A4A] font-semibold mt-1">On your reports</div>
+            <div className="text-2xl sm:text-3xl font-extrabold text-[#168A4A] mt-2">{stats.potentialMatches}</div>
+            <div className="text-[10px] sm:text-[11px] text-[#168A4A] font-semibold mt-1 truncate">AI recommendations</div>
           </div>
 
-          <div className="p-5 rounded-2xl bg-white border border-[#E3ECE6] shadow-[0_8px_24px_-4px_rgba(22,138,74,0.06)] flex flex-col justify-between">
-            <div className="flex items-center justify-between text-[#168A4A] text-xs font-bold">
+          <div className="p-4 sm:p-5 rounded-2xl bg-white border border-[#E3ECE6] shadow-[0_8px_24px_-4px_rgba(22,138,74,0.06)] flex flex-col justify-between">
+            <div className="flex items-center justify-between text-[#168A4A] text-[11px] sm:text-xs font-bold">
               <span>Recovered & Resolved</span>
-              <TrendingUp className="w-4 h-4 text-[#35B86B]" />
+              <TrendingUp className="w-3.5 h-3.5 text-[#35B86B] shrink-0" />
             </div>
-            <div className="text-3xl font-extrabold text-[#35B86B] mt-2">{stats.resolvedItems}</div>
-            <div className="text-[11px] text-[#66756C] font-medium mt-1">Completed recoveries</div>
+            <div className="text-2xl sm:text-3xl font-extrabold text-[#35B86B] mt-2">{stats.resolvedItems}</div>
+            <div className="text-[10px] sm:text-[11px] text-[#66756C] font-medium mt-1 truncate">Verified recoveries</div>
           </div>
         </div>
       ) : null}
 
       {/* AI Potential Matches Spotlight */}
       {recentMatches.length > 0 && (
-        <div className="space-y-4">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-xl bg-[#EEF8F1] border border-[#D5ECD9] flex items-center justify-center text-[#168A4A]">
+        <div className="space-y-3 sm:space-y-4">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-xl bg-[#EEF8F1] border border-[#D5ECD9] flex items-center justify-center text-[#168A4A] shrink-0">
               <Sparkles className="w-4 h-4 text-[#35B86B]" />
             </div>
             <div>
-              <h2 className="text-lg font-bold text-[#102018] tracking-tight">AI Potential Match Discoveries</h2>
+              <h2 className="text-base sm:text-lg font-bold text-[#102018] tracking-tight">AI Potential Match Discoveries</h2>
               <p className="text-xs text-[#66756C] font-medium">High-confidence similarities discovered on your reports</p>
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
             {recentMatches.map((m) => (
               <AIMatchCard
                 key={m.match_id}
@@ -231,12 +231,12 @@ export function DashboardPage() {
 
       {/* Main Content Tabs */}
       <div className="space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[#E3ECE6] pb-4">
-          {/* Tabs */}
-          <div className="flex items-center gap-2">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#E3ECE6] pb-3">
+          {/* Scrollable touch-friendly tab pills */}
+          <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-1">
             <button
               onClick={() => setActiveTab('my-items')}
-              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+              className={`shrink-0 px-3.5 sm:px-4 py-2 rounded-xl text-xs font-bold transition-all touch-target ${
                 activeTab === 'my-items'
                   ? 'bg-[#35B86B] text-white shadow-sm shadow-[#35B86B]/25'
                   : 'text-[#66756C] hover:text-[#102018] bg-white border border-[#E3ECE6]'
@@ -246,7 +246,7 @@ export function DashboardPage() {
             </button>
             <button
               onClick={() => setActiveTab('recent-reports')}
-              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+              className={`shrink-0 px-3.5 sm:px-4 py-2 rounded-xl text-xs font-bold transition-all touch-target ${
                 activeTab === 'recent-reports'
                   ? 'bg-[#35B86B] text-white shadow-sm shadow-[#35B86B]/25'
                   : 'text-[#66756C] hover:text-[#102018] bg-white border border-[#E3ECE6]'
@@ -258,7 +258,7 @@ export function DashboardPage() {
 
           <Link
             to="/items"
-            className="text-xs font-bold text-[#168A4A] hover:text-[#116B3A] flex items-center gap-1"
+            className="text-xs font-bold text-[#168A4A] hover:text-[#116B3A] flex items-center gap-1 self-start sm:self-auto pt-1 sm:pt-0"
           >
             <span>View Full Directory</span>
             <ArrowRight className="w-3.5 h-3.5 text-[#35B86B]" />
@@ -267,45 +267,47 @@ export function DashboardPage() {
 
         {/* Tab Content */}
         {isLoading ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
             <CardSkeleton />
             <CardSkeleton />
             <CardSkeleton />
           </div>
         ) : activeTab === 'my-items' ? (
           myItems.length === 0 ? (
-            <div className="rounded-3xl bg-white border border-[#E3ECE6] p-12 text-center space-y-4 shadow-sm">
-              <div className="w-14 h-14 rounded-2xl bg-[#EEF8F1] border border-[#D5ECD9] flex items-center justify-center mx-auto text-[#168A4A]">
-                <Layers className="w-7 h-7" />
+            <div className="rounded-3xl bg-white border border-[#E3ECE6] p-8 sm:p-12 text-center space-y-4 shadow-sm">
+              <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-[#EEF8F1] border border-[#D5ECD9] flex items-center justify-center mx-auto text-[#168A4A]">
+                <Layers className="w-6 h-6 sm:w-7 sm:h-7" />
               </div>
-              <h3 className="text-base font-bold text-[#102018]">No active lost or found reports yet</h3>
-              <p className="text-xs text-[#66756C] max-w-sm mx-auto font-medium">
-                Hopefully you won't lose anything — but we're ready whenever you do!
-              </p>
-              <div className="flex justify-center gap-3 pt-2">
+              <div className="space-y-1">
+                <h3 className="text-base font-bold text-[#102018]">No active lost or found reports yet</h3>
+                <p className="text-xs text-[#66756C] max-w-sm mx-auto font-medium">
+                  Hopefully you won't lose anything — but we're ready whenever you do!
+                </p>
+              </div>
+              <div className="flex flex-col sm:flex-row justify-center gap-2.5 pt-2">
                 <Link
                   to="/report/lost"
-                  className="px-4 py-2 rounded-xl text-xs font-bold bg-[#FFF1F2] text-[#E11D48] border border-[#FFE4E6]"
+                  className="px-4 py-2.5 rounded-xl text-xs font-bold bg-[#FFF1F2] text-[#E11D48] border border-[#FFE4E6] touch-target flex items-center justify-center"
                 >
                   Report Lost Item
                 </Link>
                 <Link
                   to="/report/found"
-                  className="btn-primary px-4 py-2 text-xs"
+                  className="btn-primary px-4 py-2.5 text-xs touch-target flex items-center justify-center"
                 >
                   Report Found Item
                 </Link>
               </div>
             </div>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
               {myItems.map((item) => (
                 <ItemCard key={item.id} item={item} />
               ))}
             </div>
           )
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
             {recentReports.map((item) => (
               <ItemCard key={item.id} item={item} />
             ))}

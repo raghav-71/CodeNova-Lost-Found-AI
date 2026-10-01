@@ -54,8 +54,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     async function initAuth() {
       try {
-        const storedToken = localStorage.getItem('findit_auth_token');
+        if (isSupabaseConfigured) {
+          const { data: { session }, error } = await supabase.auth.getSession();
+          if (error) {
+            console.warn('Supabase getSession returned error:', error);
+          }
 
+          if (session?.user && mounted) {
+            const sbToken = session.access_token;
+            localStorage.setItem('findit_auth_token', sbToken);
+            setToken(sbToken);
+            await syncUserProfile(session.user);
+            if (mounted) setIsLoading(false);
+            return;
+          }
+        }
+
+        // Check if there is an active valid token from backend auth
+        const storedToken = localStorage.getItem('findit_auth_token');
         if (storedToken) {
           try {
             const res = await api.getCurrentUser();
@@ -67,18 +83,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             }
           } catch {
             // Token is invalid/expired
-          }
-        }
-
-        if (isSupabaseConfigured) {
-          const { data: { session } } = await supabase.auth.getSession();
-          if (session?.user && mounted) {
-            const sbToken = session.access_token;
-            localStorage.setItem('findit_auth_token', sbToken);
-            setToken(sbToken);
-            await syncUserProfile(session.user);
-            if (mounted) setIsLoading(false);
-            return;
           }
         }
 
@@ -101,12 +105,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     let authSubscription: any = null;
     if (isSupabaseConfigured) {
       const { data } = supabase.auth.onAuthStateChange(async (event, session) => {
-        if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED') {
+        if (!mounted) return;
+
+        if (event === 'INITIAL_SESSION' || event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED') {
           if (session?.user) {
             const sbToken = session.access_token;
             localStorage.setItem('findit_auth_token', sbToken);
             setToken(sbToken);
             await syncUserProfile(session.user);
+          } else {
+            localStorage.removeItem('findit_auth_token');
+            setToken(null);
+            setUser(null);
           }
         } else if (event === 'SIGNED_OUT') {
           localStorage.removeItem('findit_auth_token');
@@ -126,58 +136,116 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const login = async (email: string, password: string) => {
     const cleanEmail = email.trim().toLowerCase();
 
-    // 1. First attempt Supabase direct sign-in
-    if (isSupabaseConfigured) {
+    if (!isSupabaseConfigured) {
+      // If client environment variables are not configured, try backend auth endpoint
       try {
-        const { data, error } = await supabase.auth.signInWithPassword({
-          email: cleanEmail,
-          password
-        });
-
-        if (!error && data?.session) {
-          localStorage.setItem('findit_auth_token', data.session.access_token);
-          setToken(data.session.access_token);
-          await syncUserProfile(data.user);
+        const res = await api.login({ email: cleanEmail, password });
+        if (res?.token && res?.user) {
+          localStorage.setItem('findit_auth_token', res.token);
+          setToken(res.token);
+          setUser(res.user);
           return;
         }
-      } catch (directErr) {
-        console.warn('Direct Supabase sign-in encountered an issue, trying backend auth:', directErr);
+      } catch (apiErr: any) {
+        if (apiErr.message?.includes('not configured')) {
+          throw new Error('Supabase configuration is missing. Check the required environment variables.');
+        }
+        throw apiErr;
+      }
+      throw new Error('Supabase configuration is missing. Check the required environment variables.');
+    }
+
+    // 1. Direct Supabase sign in
+    let { data, error } = await supabase.auth.signInWithPassword({
+      email: cleanEmail,
+      password
+    });
+
+    // 2. If email confirmation was pending in Supabase, auto-confirm through server and sign in immediately
+    if (error && error.message.toLowerCase().includes('email not confirmed')) {
+      try {
+        const res = await api.login({ email: cleanEmail, password });
+        if (res?.token && res?.user) {
+          localStorage.setItem('findit_auth_token', res.token);
+          setToken(res.token);
+          setUser(res.user);
+          // Sync client-side Supabase session as well
+          const retry = await supabase.auth.signInWithPassword({ email: cleanEmail, password });
+          if (retry.data?.user) {
+            await syncUserProfile(retry.data.user);
+          }
+          return;
+        }
+      } catch (loginFallbackErr: any) {
+        throw new Error(loginFallbackErr.message || 'Invalid email or password.');
       }
     }
 
-    // 2. Fallback to server /auth/login (which auto-confirms email and validates via Supabase Auth)
-    const res = await api.login({ email: cleanEmail, password });
-    if (res?.token && res?.user) {
-      localStorage.setItem('findit_auth_token', res.token);
-      setToken(res.token);
-      setUser(res.user);
-      return;
+    if (error) {
+      const msg = error.message.toLowerCase();
+      if (msg.includes('invalid login credentials') || msg.includes('invalid credentials')) {
+        throw new Error('Invalid email or password. Please check your credentials.');
+      }
+      if (msg.includes('rate limit') || msg.includes('too many requests')) {
+        throw new Error('Too many login attempts. Please try again later.');
+      }
+      throw new Error(error.message || 'Invalid email or password.');
     }
 
-    throw new Error('Invalid email or password. Please check your credentials.');
+    if (data?.session && data?.user) {
+      const sbToken = data.session.access_token;
+      localStorage.setItem('findit_auth_token', sbToken);
+      setToken(sbToken);
+      await syncUserProfile(data.user);
+    }
   };
 
   const register = async (name: string, email: string, password: string, campus?: string, phone?: string) => {
     const cleanEmail = email.trim().toLowerCase();
     const cleanName = name.trim();
+    const cleanCampus = campus?.trim() || 'Central Campus';
+    const cleanPhone = phone?.trim() || '';
 
     // Register via server to ensure auto-confirmed email in Supabase Auth
-    const res = await api.register({
-      name: cleanName,
-      email: cleanEmail,
-      password,
-      campus,
-      phone
-    });
+    try {
+      const res = await api.register({
+        name: cleanName,
+        email: cleanEmail,
+        password,
+        campus: cleanCampus,
+        phone: cleanPhone
+      });
 
-    if (res?.token && res?.user) {
-      localStorage.setItem('findit_auth_token', res.token);
-      setToken(res.token);
-      setUser(res.user);
-      return;
+      if (res?.token && res?.user) {
+        localStorage.setItem('findit_auth_token', res.token);
+        setToken(res.token);
+        setUser(res.user);
+
+        // Also establish the session in the client Supabase SDK
+        if (isSupabaseConfigured) {
+          try {
+            await supabase.auth.signInWithPassword({
+              email: cleanEmail,
+              password
+            });
+          } catch {
+            // Server token is already valid and active
+          }
+        }
+        return;
+      }
+    } catch (apiErr: any) {
+      // If server returned specific message, propagate it
+      if (apiErr.message?.includes('already exists') || apiErr.message?.includes('already registered')) {
+        throw new Error('An account with this campus email already exists. Please log in.');
+      }
+      if (apiErr.message?.includes('not configured')) {
+        throw new Error('Supabase configuration is missing. Check the required environment variables.');
+      }
+      throw apiErr;
     }
 
-    // If no session token returned, attempt direct login
+    // Direct fallback login if needed
     await login(cleanEmail, password);
   };
 

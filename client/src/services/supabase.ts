@@ -1,13 +1,17 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+const supabaseUrl = (import.meta.env.VITE_SUPABASE_URL || '').trim();
+const supabaseAnonKey = (import.meta.env.VITE_SUPABASE_ANON_KEY || import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || '').trim();
 
 export const isSupabaseConfigured = Boolean(
   supabaseUrl && 
   supabaseAnonKey && 
   !supabaseUrl.includes('your-project-id') &&
-  !supabaseAnonKey.includes('your_supabase_anon_key')
+  !supabaseUrl.includes('placeholder') &&
+  !supabaseUrl.includes('YOUR_') &&
+  !supabaseAnonKey.includes('your_supabase_anon_key') &&
+  !supabaseAnonKey.includes('placeholder') &&
+  !supabaseAnonKey.includes('YOUR_')
 );
 
 // Initialize Supabase Client with graceful fallback

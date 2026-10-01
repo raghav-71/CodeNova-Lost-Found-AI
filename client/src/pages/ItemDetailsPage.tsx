@@ -154,13 +154,85 @@ export function ItemDetailsPage() {
     );
   }
 
+  // Action Box Component (shared for desktop sidebar & mobile natural flow)
+  const ActionBox = () => (
+    <div className="rounded-3xl bg-white border border-[#D5ECD9] p-5 sm:p-7 shadow-[0_12px_32px_-4px_rgba(22,138,74,0.08)] space-y-4">
+      <div className="flex items-center gap-2.5">
+        <div className="w-9 h-9 rounded-xl bg-[#EEF8F1] border border-[#D5ECD9] flex items-center justify-center text-[#168A4A] shrink-0">
+          <ShieldCheck className="w-5 h-5 text-[#35B86B]" />
+        </div>
+        <div>
+          <h3 className="text-sm font-bold text-[#102018]">Item Verification & Claim</h3>
+          <p className="text-[11px] text-[#66756C] font-medium">Direct campus verification</p>
+        </div>
+      </div>
+
+      {item.status === 'RESOLVED' ? (
+        <div className="p-4 rounded-2xl bg-[#EEF8F1] border border-[#D5ECD9] text-[#168A4A] text-xs space-y-1.5">
+          <div className="flex items-center gap-1.5 font-bold">
+            <CheckCircle2 className="w-4 h-4 text-[#35B86B]" />
+            <span>Item Successfully Recovered 🎉</span>
+          </div>
+          <p className="text-[11px] text-[#168A4A]/90 font-medium">
+            This report has been completed and ownership verified.
+          </p>
+        </div>
+      ) : userClaim ? (
+        <div className="p-4 rounded-2xl bg-[#FEF3C7] border border-[#FDE68A] text-[#92400E] text-xs space-y-1.5">
+          <div className="flex items-center gap-1.5 font-bold">
+            <Clock className="w-4 h-4 text-[#D97706]" />
+            <span>Your Claim is {userClaim.status}</span>
+          </div>
+          <p className="text-[11px] text-[#92400E]/90 font-medium">
+            The finder has received your questionnaire and will review shortly.
+          </p>
+        </div>
+      ) : isOwner ? (
+        <div className="p-4 rounded-2xl bg-[#EEF8F1] border border-[#D5ECD9] text-[#168A4A] text-xs space-y-2">
+          <div className="font-bold text-[#168A4A]">You reported this item</div>
+          <p className="text-[11px] text-[#2D3D34] leading-relaxed font-medium">
+            You will receive notifications whenever a student submits an ownership claim or an AI potential match is detected.
+          </p>
+        </div>
+      ) : item.type === 'FOUND' ? (
+        <div className="space-y-3">
+          <p className="text-xs text-[#66756C] leading-relaxed font-medium">
+            Do you believe this found item belongs to you? Complete our verification questionnaire to initiate recovery.
+          </p>
+          <button
+            onClick={() => {
+              setClaimTargetItem(item);
+              setIsClaimModalOpen(true);
+            }}
+            className="btn-primary w-full py-3.5 text-xs sm:text-sm flex items-center justify-center gap-2 touch-target shadow-md shadow-[#35B86B]/25"
+          >
+            <ShieldCheck className="w-4 h-4" />
+            <span>Claim This Item</span>
+          </button>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          <p className="text-xs text-[#66756C] leading-relaxed font-medium">
+            Found this item on campus? Report it to automatically connect with the student who lost it.
+          </p>
+          <Link
+            to="/report/found"
+            className="btn-primary w-full py-3.5 text-xs sm:text-sm flex items-center justify-center gap-2 touch-target shadow-md shadow-[#35B86B]/25"
+          >
+            <span>Report Matching Found Item</span>
+          </Link>
+        </div>
+      )}
+    </div>
+  );
+
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+    <div className="max-w-7xl mx-auto px-3.5 sm:px-6 lg:px-8 py-6 sm:py-8 space-y-6 sm:space-y-8">
       {/* Navigation & Actions Top Bar */}
       <div className="flex items-center justify-between">
         <Link
           to="/items"
-          className="inline-flex items-center gap-2 text-xs font-bold text-[#66756C] hover:text-[#102018] transition-colors"
+          className="inline-flex items-center gap-2 text-xs font-bold text-[#66756C] hover:text-[#102018] transition-colors touch-target"
         >
           <ArrowLeft className="w-4 h-4 text-[#35B86B]" />
           <span>Back to Directory</span>
@@ -170,7 +242,7 @@ export function ItemDetailsPage() {
           <button
             onClick={handleRematch}
             disabled={isRematching}
-            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold bg-white hover:bg-[#EEF8F1] text-[#168A4A] border border-[#D5ECD9] transition-all disabled:opacity-50 shadow-sm"
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold bg-white hover:bg-[#EEF8F1] text-[#168A4A] border border-[#D5ECD9] transition-all disabled:opacity-50 shadow-sm touch-target"
           >
             <RefreshCw className={`w-3.5 h-3.5 text-[#35B86B] ${isRematching ? 'animate-spin' : ''}`} />
             <span>{isRematching ? 'Scanning AI...' : 'Re-run AI Match'}</span>
@@ -179,12 +251,12 @@ export function ItemDetailsPage() {
       </div>
 
       {/* Main Grid: Left Details & Right Actions/Matches */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 items-start">
         {/* Left Column: Image, Description, Characteristics, Timeline */}
-        <div className="lg:col-span-7 space-y-6">
+        <div className="lg:col-span-7 space-y-5 sm:space-y-6">
           {/* Main Visual Image Card */}
           <div className="relative rounded-3xl bg-white border border-[#E3ECE6] overflow-hidden shadow-[0_12px_32px_-4px_rgba(22,138,74,0.08)]">
-            <div className="aspect-[16/10] w-full bg-[#EEF8F1] overflow-hidden">
+            <div className="aspect-[16/10] sm:aspect-[16/9] w-full bg-[#EEF8F1] overflow-hidden">
               <img
                 src={getImageUrl(item.primary_image)}
                 alt={item.title}
@@ -193,26 +265,23 @@ export function ItemDetailsPage() {
             </div>
 
             {/* Top Badges */}
-            <div className="absolute top-4 left-4 flex items-center gap-2">
+            <div className="absolute top-3 left-3 sm:top-4 sm:left-4 flex items-center gap-1.5 sm:gap-2">
               <TypeBadge type={item.type} size="md" />
-              <span className="text-xs font-bold bg-white/90 backdrop-blur-md text-[#102018] px-3 py-1 rounded-xl border border-white/60 shadow-sm flex items-center gap-1.5">
+              <span className="text-[11px] sm:text-xs font-bold bg-white/90 backdrop-blur-md text-[#102018] px-2.5 py-1 rounded-xl border border-white/60 shadow-sm flex items-center gap-1">
                 <Tag className="w-3.5 h-3.5 text-[#35B86B]" />
                 {item.category}
               </span>
             </div>
 
-            <div className="absolute top-4 right-4">
+            <div className="absolute top-3 right-3 sm:top-4 sm:right-4">
               <StatusBadge status={item.status} size="md" />
             </div>
           </div>
 
-          {/* Multimodal AI Image Verification Card */}
-          <MultimodalAnalysisBadge item={item} />
-
           {/* Details Card */}
-          <div className="rounded-3xl bg-white border border-[#E3ECE6] p-6 sm:p-8 space-y-6 shadow-[0_10px_28px_-4px_rgba(22,138,74,0.06)]">
+          <div className="rounded-3xl bg-white border border-[#E3ECE6] p-5 sm:p-8 space-y-5 sm:space-y-6 shadow-[0_10px_28px_-4px_rgba(22,138,74,0.06)]">
             <div>
-              <h1 className="text-2xl sm:text-3xl font-extrabold text-[#102018] tracking-tight leading-snug">
+              <h1 className="text-xl sm:text-3xl font-extrabold text-[#102018] tracking-tight leading-snug">
                 {item.title}
               </h1>
               <p className="text-xs text-[#66756C] font-medium mt-1">
@@ -222,7 +291,7 @@ export function ItemDetailsPage() {
 
             <div className="space-y-2">
               <h3 className="text-xs font-bold uppercase tracking-wider text-[#94A39B]">Detailed Description</h3>
-              <p className="text-sm text-[#2D3D34] leading-relaxed whitespace-pre-line font-medium">
+              <p className="text-sm text-[#2D3D34] leading-relaxed whitespace-pre-line font-medium break-words-anywhere">
                 {item.description}
               </p>
             </div>
@@ -231,23 +300,23 @@ export function ItemDetailsPage() {
             {item.characteristics && (
               <div className="p-4 rounded-2xl bg-[#EEF8F1] border border-[#D5ECD9] space-y-1.5">
                 <div className="flex items-center gap-1.5 text-xs font-bold text-[#168A4A]">
-                  <Sparkles className="w-4 h-4 text-[#35B86B]" />
+                  <Sparkles className="w-4 h-4 text-[#35B86B] shrink-0" />
                   <span>Distinctive Characteristics & Identifying Marks</span>
                 </div>
-                <p className="text-xs text-[#2D3D34] leading-relaxed font-medium">
+                <p className="text-xs text-[#2D3D34] leading-relaxed font-medium break-words-anywhere">
                   {item.characteristics}
                 </p>
               </div>
             )}
 
             {/* Location & Time Info Grid */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-4 border-t border-[#E3ECE6]">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 sm:gap-4 pt-4 border-t border-[#E3ECE6]">
               <div className="flex items-start gap-3">
-                <div className="p-2.5 rounded-xl bg-[#EEF8F1] text-[#168A4A] border border-[#D5ECD9]">
+                <div className="p-2.5 rounded-xl bg-[#EEF8F1] text-[#168A4A] border border-[#D5ECD9] shrink-0">
                   <MapPin className="w-5 h-5 text-[#35B86B]" />
                 </div>
                 <div>
-                  <div className="text-[11px] font-bold text-[#94A39B] uppercase">Campus Location</div>
+                  <div className="text-[10px] sm:text-[11px] font-bold text-[#94A39B] uppercase">Campus Location</div>
                   <div className="text-sm font-bold text-[#102018]">{item.location}</div>
                   {item.building_zone && (
                     <div className="text-xs text-[#168A4A] font-semibold">{item.building_zone}</div>
@@ -256,19 +325,24 @@ export function ItemDetailsPage() {
               </div>
 
               <div className="flex items-start gap-3">
-                <div className="p-2.5 rounded-xl bg-[#EEF8F1] text-[#168A4A] border border-[#D5ECD9]">
+                <div className="p-2.5 rounded-xl bg-[#EEF8F1] text-[#168A4A] border border-[#D5ECD9] shrink-0">
                   <Calendar className="w-5 h-5 text-[#35B86B]" />
                 </div>
                 <div>
-                  <div className="text-[11px] font-bold text-[#94A39B] uppercase">Date & Time Logged</div>
+                  <div className="text-[10px] sm:text-[11px] font-bold text-[#94A39B] uppercase">Date & Time Logged</div>
                   <div className="text-sm font-bold text-[#102018]">{item.date}</div>
                   {item.time && <div className="text-xs text-[#66756C] font-medium">{item.time}</div>}
                 </div>
               </div>
             </div>
 
+            {/* Mobile Action Box (Rendered right here on mobile screens so user doesn't miss the claim button) */}
+            <div className="block lg:hidden pt-2">
+              <ActionBox />
+            </div>
+
             {/* Status Timeline */}
-            <div className="pt-6 border-t border-[#E3ECE6] space-y-3">
+            <div className="pt-5 border-t border-[#E3ECE6] space-y-3">
               <h3 className="text-xs font-bold uppercase tracking-wider text-[#94A39B]">Recovery Status Tracking</h3>
               <StatusTimeline
                 status={item.status}
@@ -278,37 +352,40 @@ export function ItemDetailsPage() {
             </div>
           </div>
 
+          {/* Multimodal AI Image Verification Card */}
+          <MultimodalAnalysisBadge item={item} />
+
           {/* If Owner: Received Claims Inspection */}
           {isOwner && claims.length > 0 && (
-            <div className="rounded-3xl bg-white border border-[#FDE68A] p-6 sm:p-8 space-y-4 shadow-sm">
+            <div className="rounded-3xl bg-white border border-[#FDE68A] p-5 sm:p-8 space-y-4 shadow-sm">
               <div className="flex items-center gap-2">
-                <FileText className="w-5 h-5 text-[#D97706]" />
+                <FileText className="w-5 h-5 text-[#D97706] shrink-0" />
                 <div>
-                  <h3 className="text-lg font-bold text-[#102018]">Ownership Claims Received ({claims.length})</h3>
+                  <h3 className="text-base sm:text-lg font-bold text-[#102018]">Ownership Claims Received ({claims.length})</h3>
                   <p className="text-xs text-[#66756C] font-medium">Review verification responses provided by claimants</p>
                 </div>
               </div>
 
-              <div className="space-y-4 pt-2">
+              <div className="space-y-4 pt-1">
                 {claims.map((c) => (
                   <div
                     key={c.id}
-                    className="p-5 rounded-2xl bg-[#F7FBF8] border border-[#E3ECE6] space-y-3 text-xs"
+                    className="p-4 sm:p-5 rounded-2xl bg-[#F7FBF8] border border-[#E3ECE6] space-y-3 text-xs"
                   >
-                    <div className="flex items-start justify-between gap-4">
-                      <div className="flex items-center gap-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex items-center gap-2.5">
                         <img
                           src={c.claimant_avatar || `https://api.dicebear.com/7.x/bottts/svg?seed=${c.claimant_name}`}
                           alt={c.claimant_name}
-                          className="w-9 h-9 rounded-xl object-cover bg-white border border-[#E3ECE6]"
+                          className="w-9 h-9 rounded-xl object-cover bg-white border border-[#E3ECE6] shrink-0"
                         />
-                        <div>
-                          <div className="font-bold text-sm text-[#102018]">{c.claimant_name}</div>
-                          <div className="text-[11px] text-[#168A4A] font-semibold">{c.claimant_campus}</div>
+                        <div className="min-w-0">
+                          <div className="font-bold text-sm text-[#102018] truncate">{c.claimant_name}</div>
+                          <div className="text-[11px] text-[#168A4A] font-semibold truncate">{c.claimant_campus}</div>
                         </div>
                       </div>
 
-                      <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${
+                      <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold shrink-0 ${
                         c.status === 'APPROVED'
                           ? 'bg-[#EEF8F1] text-[#168A4A] border border-[#D5ECD9]'
                           : c.status === 'REJECTED'
@@ -322,7 +399,7 @@ export function ItemDetailsPage() {
                     <div className="space-y-2 bg-white p-3.5 rounded-xl border border-[#E3ECE6]">
                       <div>
                         <span className="font-bold text-[#66756C]">Where Lost: </span>
-                        <span className="text-[#102018] font-medium">{c.location_lost}</span>
+                        <span className="text-[#102018] font-medium break-words-anywhere">{c.location_lost}</span>
                       </div>
                       <div>
                         <span className="font-bold text-[#66756C]">Date Lost: </span>
@@ -330,30 +407,30 @@ export function ItemDetailsPage() {
                       </div>
                       <div>
                         <span className="font-bold text-[#66756C]">Identifying Details: </span>
-                        <span className="text-[#102018] font-medium">{c.identifying_details}</span>
+                        <span className="text-[#102018] font-medium break-words-anywhere">{c.identifying_details}</span>
                       </div>
                       {c.proof_notes && (
                         <div>
                           <span className="font-bold text-[#66756C]">Proof Notes: </span>
-                          <span className="text-[#102018] font-medium">{c.proof_notes}</span>
+                          <span className="text-[#102018] font-medium break-words-anywhere">{c.proof_notes}</span>
                         </div>
                       )}
                     </div>
 
                     {c.status === 'PENDING' && (
-                      <div className="flex items-center justify-end gap-2 pt-2">
+                      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-end gap-2 pt-2">
                         <button
                           onClick={() => handleClaimStatusUpdate(c.id, 'REJECTED')}
-                          className="px-3.5 py-1.5 rounded-xl bg-[#FFF1F2] hover:bg-[#FFE4E6] text-[#E11D48] border border-[#FFE4E6] font-bold"
+                          className="px-4 py-2.5 rounded-xl bg-[#FFF1F2] hover:bg-[#FFE4E6] text-[#E11D48] border border-[#FFE4E6] font-bold touch-target text-center"
                         >
                           Reject Claim
                         </button>
                         <button
                           onClick={() => handleClaimStatusUpdate(c.id, 'APPROVED')}
-                          className="btn-primary px-4 py-1.5 text-xs flex items-center gap-1.5"
+                          className="btn-primary px-5 py-2.5 text-xs flex items-center justify-center gap-1.5 touch-target text-center"
                         >
                           <Check className="w-3.5 h-3.5" />
-                          <span>Approve Claim & Resolve Item</span>
+                          <span>Approve Claim & Resolve</span>
                         </button>
                       </div>
                     )}
@@ -364,135 +441,66 @@ export function ItemDetailsPage() {
           )}
         </div>
 
-        {/* Right Column: Actions, Reporter Profile, AI Potential Matches */}
-        <div className="lg:col-span-5 space-y-6">
-          {/* Claim Action Box */}
-          <div className="rounded-3xl bg-white border border-[#D5ECD9] p-6 sm:p-7 shadow-[0_12px_32px_-4px_rgba(22,138,74,0.08)] space-y-4">
-            <div className="flex items-center gap-2.5">
-              <div className="w-9 h-9 rounded-xl bg-[#EEF8F1] border border-[#D5ECD9] flex items-center justify-center text-[#168A4A]">
-                <ShieldCheck className="w-5 h-5 text-[#35B86B]" />
-              </div>
-              <div>
-                <h3 className="text-sm font-bold text-[#102018]">Item Actions</h3>
-                <p className="text-[11px] text-[#66756C] font-medium">Direct campus verification</p>
-              </div>
-            </div>
-
-            {item.status === 'RESOLVED' ? (
-              <div className="p-4 rounded-2xl bg-[#EEF8F1] border border-[#D5ECD9] text-[#168A4A] text-xs space-y-1.5">
-                <div className="flex items-center gap-1.5 font-bold">
-                  <CheckCircle2 className="w-4 h-4 text-[#35B86B]" />
-                  <span>Item Successfully Recovered 🎉</span>
-                </div>
-                <p className="text-[11px] text-[#168A4A]/90 font-medium">
-                  This report has been completed and ownership verified.
-                </p>
-              </div>
-            ) : userClaim ? (
-              <div className="p-4 rounded-2xl bg-[#FEF3C7] border border-[#FDE68A] text-[#92400E] text-xs space-y-1.5">
-                <div className="flex items-center gap-1.5 font-bold">
-                  <Clock className="w-4 h-4 text-[#D97706]" />
-                  <span>Your Claim is {userClaim.status}</span>
-                </div>
-                <p className="text-[11px] text-[#92400E]/90 font-medium">
-                  The finder has received your questionnaire and will review shortly.
-                </p>
-              </div>
-            ) : isOwner ? (
-              <div className="p-4 rounded-2xl bg-[#EEF8F1] border border-[#D5ECD9] text-[#168A4A] text-xs space-y-2">
-                <div className="font-bold text-[#168A4A]">You reported this item</div>
-                <p className="text-[11px] text-[#2D3D34] leading-relaxed font-medium">
-                  You will receive notifications whenever a student submits an ownership claim or an AI potential match is detected.
-                </p>
-              </div>
-            ) : item.type === 'FOUND' ? (
-              <div className="space-y-3">
-                <p className="text-xs text-[#66756C] leading-relaxed font-medium">
-                  Do you believe this found item belongs to you? Complete our verification questionnaire to initiate recovery.
-                </p>
-                <button
-                  onClick={() => {
-                    setClaimTargetItem(item);
-                    setIsClaimModalOpen(true);
-                  }}
-                  className="btn-primary w-full py-3 text-xs sm:text-sm flex items-center justify-center gap-2"
-                >
-                  <ShieldCheck className="w-4 h-4" />
-                  <span>Claim This Item</span>
-                </button>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                <p className="text-xs text-[#66756C] leading-relaxed font-medium">
-                  Found this item on campus? Report it to automatically connect with the student who lost it.
-                </p>
-                <Link
-                  to="/report/found"
-                  className="btn-primary w-full py-3 text-xs sm:text-sm flex items-center justify-center gap-2"
-                >
-                  <span>Report Matching Found Item</span>
-                </Link>
-              </div>
-            )}
+        {/* Right Column: Desktop Action Box, Reporter Profile, AI Potential Matches */}
+        <div className="lg:col-span-5 space-y-5 sm:space-y-6">
+          {/* Desktop Only Action Box (Already shown on mobile right after Details) */}
+          <div className="hidden lg:block">
+            <ActionBox />
           </div>
 
           {/* Privacy-Safe Reporter Meta Card */}
-          <div className="rounded-3xl bg-white border border-[#E3ECE6] p-6 space-y-4 shadow-sm">
+          <div className="rounded-3xl bg-white border border-[#E3ECE6] p-5 sm:p-6 space-y-3.5 shadow-sm">
             <h3 className="text-xs font-bold uppercase tracking-wider text-[#94A39B]">Reporter Profile</h3>
             <div className="flex items-center gap-3">
               <img
                 src={item.reporter_avatar || `https://api.dicebear.com/7.x/bottts/svg?seed=${item.reporter_name}`}
                 alt={item.reporter_name}
-                className="w-12 h-12 rounded-2xl object-cover border border-[#E3ECE6] bg-[#EEF8F1]"
+                className="w-11 h-11 rounded-2xl object-cover border border-[#E3ECE6] bg-[#EEF8F1] shrink-0"
               />
-              <div>
-                <div className="text-sm font-bold text-[#102018]">{item.reporter_name}</div>
-                <div className="text-xs text-[#168A4A] font-bold">{item.reporter_campus}</div>
-                <div className="text-[10px] text-[#94A39B] font-medium mt-0.5">Campus Community Member</div>
+              <div className="min-w-0">
+                <div className="text-sm font-bold text-[#102018] truncate">{item.reporter_name}</div>
+                <div className="text-xs text-[#168A4A] font-bold truncate">{item.reporter_campus}</div>
               </div>
             </div>
-
-            <div className="pt-3 border-t border-[#E3ECE6] flex items-center gap-2 text-[11px] text-[#66756C] font-medium">
-              <ShieldCheck className="w-3.5 h-3.5 text-[#35B86B] shrink-0" />
-              <span>Personal contact details protected until claim verification.</span>
+            <div className="text-[11px] text-[#66756C] bg-[#F7FBF8] p-3 rounded-xl border border-[#E3ECE6] flex items-center gap-2">
+              <ShieldCheck className="w-4 h-4 text-[#35B86B] shrink-0" />
+              <span>Contact details stay private until ownership is verified and approved.</span>
             </div>
           </div>
 
-          {/* AI Potential Matches Panel */}
-          <div className="space-y-4">
-            <div className="flex items-center gap-2">
-              <Sparkles className="w-4 h-4 text-[#35B86B]" />
-              <h3 className="text-sm font-bold text-[#102018]">
-                AI Potential Matches ({matches.length})
-              </h3>
-            </div>
-
-            {matches.length === 0 ? (
-              <div className="rounded-2xl bg-white border border-[#E3ECE6] p-6 text-center text-xs text-[#66756C] space-y-1 shadow-sm font-medium">
-                <p>No potential matches discovered yet.</p>
-                <p className="text-[11px] text-[#94A39B]">Our AI continuously scans new campus reports 24/7.</p>
+          {/* AI Potential Matches List */}
+          {matches.length > 0 && (
+            <div className="rounded-3xl bg-white border border-[#E3ECE6] p-5 sm:p-6 space-y-4 shadow-sm">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Sparkles className="w-4 h-4 text-[#35B86B]" />
+                  <h3 className="text-sm font-bold text-[#102018]">AI Potential Matches ({matches.length})</h3>
+                </div>
+                <span className="text-[10px] font-bold text-[#168A4A] bg-[#EEF8F1] px-2.5 py-0.5 rounded-full border border-[#D5ECD9]">
+                  Live
+                </span>
               </div>
-            ) : (
+
               <div className="space-y-4">
                 {matches.map((m) => (
                   <AIMatchCard
                     key={m.match_id}
                     match={m}
                     originItemId={item.id}
-                    onClaimClick={(matchItem) => {
-                      setClaimTargetItem(matchItem);
+                    onClaimClick={(claimItem) => {
+                      setClaimTargetItem(claimItem);
                       setIsClaimModalOpen(true);
                     }}
                   />
                 ))}
               </div>
-            )}
-          </div>
+            </div>
+          )}
         </div>
       </div>
 
       {/* Claim Modal */}
-      {isClaimModalOpen && claimTargetItem && (
+      {claimTargetItem && (
         <ClaimModal
           item={claimTargetItem}
           isOpen={isClaimModalOpen}
@@ -501,6 +509,8 @@ export function ItemDetailsPage() {
             setClaimTargetItem(null);
           }}
           onSuccess={() => {
+            setIsClaimModalOpen(false);
+            setClaimTargetItem(null);
             loadItemDetails();
           }}
         />

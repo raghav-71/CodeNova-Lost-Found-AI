@@ -28,7 +28,7 @@ export function createAuthRouter(): Router {
       const avatarUrl = `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(cleanName)}`;
 
       if (!isSupabaseServerConfigured) {
-        return res.status(500).json({ error: 'Supabase authentication service is not configured.' });
+        return res.status(500).json({ error: 'Supabase configuration is missing. Check the required environment variables.' });
       }
 
       // Create permanent user in Supabase auth.users with auto-confirmed email
@@ -108,7 +108,7 @@ export function createAuthRouter(): Router {
       const cleanEmail = email.trim().toLowerCase();
 
       if (!isSupabaseServerConfigured) {
-        return res.status(500).json({ error: 'Supabase authentication service is not configured.' });
+        return res.status(500).json({ error: 'Supabase configuration is missing. Check the required environment variables.' });
       }
 
       // Attempt Supabase sign in
@@ -138,7 +138,14 @@ export function createAuthRouter(): Router {
       }
 
       if (error || !data?.session || !data?.user) {
-        return res.status(400).json({ error: 'Invalid email or password. Please check your credentials.' });
+        const msg = error?.message?.toLowerCase() || '';
+        if (msg.includes('email not confirmed')) {
+          return res.status(400).json({ error: 'Please verify your email before signing in.' });
+        }
+        if (msg.includes('rate limit') || msg.includes('too many requests')) {
+          return res.status(429).json({ error: 'Too many login attempts. Please try again later.' });
+        }
+        return res.status(400).json({ error: 'Invalid login credentials.' });
       }
 
       const sessionUser = data.user;

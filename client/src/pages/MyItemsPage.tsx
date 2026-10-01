@@ -77,11 +77,11 @@ export function MyItemsPage() {
   });
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
+    <div className="max-w-7xl mx-auto px-3.5 sm:px-6 lg:px-8 py-6 sm:py-8 space-y-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-extrabold text-[#102018] tracking-tight">
+          <h1 className="text-xl sm:text-3xl font-extrabold text-[#102018] tracking-tight">
             My Submitted Reports
           </h1>
           <p className="text-xs sm:text-sm text-[#66756C] mt-1 font-medium">
@@ -89,17 +89,17 @@ export function MyItemsPage() {
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 self-start sm:self-auto">
           <Link
             to="/report/lost"
-            className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold bg-[#FFF1F2] text-[#E11D48] border border-[#FFE4E6] hover:bg-[#FFE4E6] transition-all"
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold bg-[#FFF1F2] text-[#E11D48] border border-[#FFE4E6] hover:bg-[#FFE4E6] transition-all touch-target"
           >
             <PlusCircle className="w-3.5 h-3.5" />
             <span>Report Lost</span>
           </Link>
           <Link
             to="/report/found"
-            className="btn-primary flex items-center gap-1.5 px-4 py-2 text-xs"
+            className="btn-primary flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold touch-target"
           >
             <PlusCircle className="w-3.5 h-3.5" />
             <span>Report Found</span>
@@ -107,12 +107,12 @@ export function MyItemsPage() {
         </div>
       </div>
 
-      {/* Filter Tabs */}
-      <div className="flex flex-wrap items-center justify-between gap-3 p-2 rounded-2xl bg-white border border-[#E3ECE6] shadow-sm">
-        <div className="flex items-center gap-1">
+      {/* Filter Tabs (Responsive wrap on mobile) */}
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 p-2 rounded-2xl bg-white border border-[#E3ECE6] shadow-sm">
+        <div className="flex items-center gap-1 overflow-x-auto no-scrollbar pb-0.5">
           <button
             onClick={() => setFilterType('ALL')}
-            className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-colors ${
+            className={`shrink-0 px-3 py-1.5 rounded-xl text-xs font-bold transition-colors touch-target ${
               filterType === 'ALL' ? 'bg-[#35B86B] text-white' : 'text-[#66756C] hover:text-[#102018]'
             }`}
           >
@@ -120,7 +120,7 @@ export function MyItemsPage() {
           </button>
           <button
             onClick={() => setFilterType('LOST')}
-            className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-colors ${
+            className={`shrink-0 px-3 py-1.5 rounded-xl text-xs font-bold transition-colors touch-target ${
               filterType === 'LOST' ? 'bg-[#FFF1F2] text-[#E11D48]' : 'text-[#66756C] hover:text-[#E11D48]'
             }`}
           >
@@ -128,7 +128,7 @@ export function MyItemsPage() {
           </button>
           <button
             onClick={() => setFilterType('FOUND')}
-            className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-colors ${
+            className={`shrink-0 px-3 py-1.5 rounded-xl text-xs font-bold transition-colors touch-target ${
               filterType === 'FOUND' ? 'bg-[#EEF8F1] text-[#168A4A]' : 'text-[#66756C] hover:text-[#168A4A]'
             }`}
           >
@@ -140,7 +140,7 @@ export function MyItemsPage() {
         <select
           value={filterStatus}
           onChange={(e) => setFilterStatus(e.target.value)}
-          className="px-3 py-1.5 rounded-xl bg-[#F7FBF8] border border-[#E3ECE6] text-xs font-medium text-[#102018] focus:outline-none focus:border-[#35B86B]"
+          className="px-3 py-2 rounded-xl bg-[#F7FBF8] border border-[#E3ECE6] text-xs font-medium text-[#102018] focus:outline-none focus:border-[#35B86B] touch-target"
         >
           <option value="ALL">All Statuses</option>
           <option value="ACTIVE">Active Search</option>
@@ -152,15 +152,15 @@ export function MyItemsPage() {
 
       {/* Grid of Items */}
       {isLoading ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
           <CardSkeleton />
           <CardSkeleton />
           <CardSkeleton />
         </div>
       ) : filtered.length === 0 ? (
-        <div className="rounded-3xl bg-white border border-[#E3ECE6] p-12 text-center space-y-4 shadow-sm">
-          <div className="w-14 h-14 rounded-2xl bg-[#EEF8F1] border border-[#D5ECD9] flex items-center justify-center mx-auto text-[#168A4A]">
-            <Layers className="w-7 h-7" />
+        <div className="rounded-3xl bg-white border border-[#E3ECE6] p-8 sm:p-12 text-center space-y-4 shadow-sm">
+          <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-[#EEF8F1] border border-[#D5ECD9] flex items-center justify-center mx-auto text-[#168A4A]">
+            <Layers className="w-6 h-6 sm:w-7 sm:h-7" />
           </div>
           <h3 className="text-base font-bold text-[#102018]">No reports match filter criteria</h3>
           <p className="text-xs text-[#66756C] max-w-sm mx-auto font-medium">
@@ -168,7 +168,7 @@ export function MyItemsPage() {
           </p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
           {filtered.map((item) => (
             <div key={item.id} className="relative group/card flex flex-col justify-between">
               <ItemCard item={item} />
@@ -178,13 +178,13 @@ export function MyItemsPage() {
                 {item.status !== 'RESOLVED' ? (
                   <button
                     onClick={() => handleMarkResolved(item.id)}
-                    className="flex items-center gap-1.5 text-[11px] font-bold text-[#168A4A] hover:text-[#116B3A] transition-colors"
+                    className="flex items-center gap-1.5 text-[11px] font-bold text-[#168A4A] hover:text-[#116B3A] transition-colors touch-target"
                   >
                     <CheckCircle2 className="w-4 h-4 text-[#35B86B]" />
                     <span>Mark as Resolved</span>
                   </button>
                 ) : (
-                  <span className="text-[11px] font-bold text-[#168A4A] flex items-center gap-1.5">
+                  <span className="text-[11px] font-bold text-[#168A4A] flex items-center gap-1.5 py-1">
                     <CheckCircle2 className="w-4 h-4 text-[#35B86B]" />
                     <span>Completed 🎉</span>
                   </span>
@@ -192,8 +192,9 @@ export function MyItemsPage() {
 
                 <button
                   onClick={() => handleDelete(item.id)}
-                  className="p-1 text-[#94A39B] hover:text-[#E11D48] transition-colors rounded"
+                  className="p-2 text-[#94A39B] hover:text-[#E11D48] transition-colors rounded touch-target flex items-center justify-center"
                   title="Delete Report"
+                  aria-label="Delete report"
                 >
                   <Trash2 className="w-4 h-4" />
                 </button>

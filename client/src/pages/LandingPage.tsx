@@ -76,6 +76,7 @@ export function LandingPage() {
             </p>
 
             {/* Natural Language Hero Search Input */}
+            {/* Natural Language Hero Search Input */}
             <div className="pt-2">
               <form 
                 onSubmit={(e) => {
@@ -85,32 +86,42 @@ export function LandingPage() {
                     window.location.href = `/items?q=${encodeURIComponent(inputEl.value.trim())}&mode=ai`;
                   }
                 }}
-                className="relative flex items-center"
+                className="relative flex flex-col sm:flex-row items-stretch sm:items-center gap-2"
               >
-                <div className="absolute left-4 text-brand-600">
-                  <Sparkles className="w-5 h-5" />
+                <div className="relative flex-1">
+                  <div className="absolute left-4 top-1/2 -translate-y-1/2 text-brand-600">
+                    <Sparkles className="w-5 h-5 text-[#35B86B]" />
+                  </div>
+                  <input
+                    type="text"
+                    name="heroQuery"
+                    placeholder="Describe what you lost or found... (e.g. 'black Samsung phone near library')"
+                    className="w-full pl-12 pr-4 sm:pr-32 py-3.5 rounded-2xl bg-white border border-[#E3ECE6] text-[#102018] placeholder-[#66756C]/60 text-xs sm:text-sm font-medium focus:outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/10 shadow-md shadow-brand-500/5 transition-all"
+                  />
+                  <button
+                    type="submit"
+                    className="hidden sm:flex absolute right-2 top-1/2 -translate-y-1/2 px-4 py-2 rounded-xl text-xs font-bold btn-primary items-center gap-1.5"
+                  >
+                    <Sparkles className="w-3.5 h-3.5" />
+                    <span>Find Matches</span>
+                  </button>
                 </div>
-                <input
-                  type="text"
-                  name="heroQuery"
-                  placeholder="Describe what you lost or found... (e.g. 'black Samsung phone near library')"
-                  className="w-full pl-12 pr-32 py-3.5 rounded-2xl bg-white border border-[#E3ECE6] text-[#102018] placeholder-[#66756C]/60 text-xs sm:text-sm font-medium focus:outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/10 shadow-md shadow-brand-500/5 transition-all"
-                />
+                {/* Mobile-only visible full-width button */}
                 <button
                   type="submit"
-                  className="absolute right-2 px-4 py-2 rounded-xl text-xs font-bold btn-primary flex items-center gap-1.5"
+                  className="sm:hidden w-full py-3 rounded-2xl text-xs font-bold btn-primary flex items-center justify-center gap-2 touch-target shadow-md shadow-[#35B86B]/25"
                 >
-                  <Sparkles className="w-3.5 h-3.5" />
-                  <span>Find Matches</span>
+                  <Sparkles className="w-4 h-4" />
+                  <span>Find Potential Matches</span>
                 </button>
               </form>
             </div>
 
             {/* CTAs */}
-            <div className="pt-1 flex flex-col sm:flex-row items-stretch sm:items-center gap-3.5">
+            <div className="pt-1 flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
               <Link
                 to="/report/lost"
-                className="btn-primary px-7 py-3.5 text-sm flex items-center justify-center gap-2"
+                className="btn-primary px-7 py-3.5 text-sm flex items-center justify-center gap-2 touch-target"
               >
                 <PlusCircle className="w-4 h-4" />
                 <span>Report Lost Item</span>
@@ -118,7 +129,7 @@ export function LandingPage() {
 
               <Link
                 to="/items"
-                className="btn-secondary px-7 py-3.5 text-sm flex items-center justify-center gap-2"
+                className="btn-secondary px-7 py-3.5 text-sm flex items-center justify-center gap-2 touch-target"
               >
                 <Search className="w-4 h-4 text-[#35B86B]" />
                 <span>Find an Item</span>
@@ -126,7 +137,7 @@ export function LandingPage() {
             </div>
 
             {/* Micro Trust Strip */}
-            <div className="pt-4 flex items-center gap-6 text-xs text-[#66756C] font-semibold">
+            <div className="pt-3 flex flex-wrap items-center gap-4 sm:gap-6 text-xs text-[#66756C] font-semibold">
               <span className="flex items-center gap-1.5">
                 <Check className="w-4 h-4 text-[#35B86B]" /> 100% Free for Students
               </span>
@@ -164,7 +175,7 @@ export function LandingPage() {
               </div>
 
               {/* 3D AI Analysis Connector Card (Middle) */}
-              <div className="p-3.5 rounded-2xl bg-[#EEF8F1] border border-[#C7EED4] shadow-md flex items-center justify-between mx-6">
+              <div className="p-3.5 rounded-2xl bg-[#EEF8F1] border border-[#C7EED4] shadow-md flex items-center justify-between mx-2 sm:mx-6">
                 <div className="flex items-center gap-2">
                   <div className="w-8 h-8 rounded-xl bg-[#35B86B] text-white flex items-center justify-center shadow-sm">
                     <Sparkles className="w-4 h-4" />

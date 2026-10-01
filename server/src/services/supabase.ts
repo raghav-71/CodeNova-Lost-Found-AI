@@ -5,16 +5,19 @@ import path from 'path';
 dotenv.config({ path: path.resolve(process.cwd(), '../.env') });
 dotenv.config();
 
-const supabaseUrl = process.env.SUPABASE_URL || '';
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || '';
-const supabaseAnonKey = process.env.SUPABASE_ANON_KEY || '';
+const supabaseUrl = (process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '').trim();
+const supabaseServiceKey = (process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || '').trim();
+const supabaseAnonKey = (process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_PUBLISHABLE_KEY || '').trim();
 
 export const isSupabaseServerConfigured = Boolean(
   supabaseUrl && 
   supabaseServiceKey &&
   !supabaseUrl.includes('placeholder') &&
   !supabaseUrl.includes('your-project-id') &&
-  !supabaseServiceKey.includes('your_supabase')
+  !supabaseUrl.includes('YOUR_') &&
+  !supabaseServiceKey.includes('your_supabase') &&
+  !supabaseServiceKey.includes('placeholder') &&
+  !supabaseServiceKey.includes('YOUR_')
 );
 
 // Admin client with full server privileges

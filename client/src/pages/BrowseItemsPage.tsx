@@ -130,11 +130,11 @@ export function BrowseItemsPage() {
   };
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
+    <div className="max-w-7xl mx-auto px-3.5 sm:px-6 lg:px-8 py-6 sm:py-8 space-y-6">
       {/* Page Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-extrabold text-[#102018] tracking-tight">
+          <h1 className="text-xl sm:text-3xl font-extrabold text-[#102018] tracking-tight">
             Campus Lost & Found Discovery
           </h1>
           <p className="text-xs sm:text-sm text-[#66756C] mt-1 font-medium">
@@ -143,10 +143,10 @@ export function BrowseItemsPage() {
         </div>
 
         {/* Search Mode Switcher Tabs */}
-        <div className="flex items-center bg-white p-1 rounded-2xl border border-[#E3ECE6] shadow-sm">
+        <div className="w-full sm:w-auto grid grid-cols-2 sm:flex items-center bg-white p-1 rounded-2xl border border-[#E3ECE6] shadow-sm">
           <button
             onClick={() => setSearchMode('ai')}
-            className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+            className={`flex items-center justify-center gap-1.5 px-3.5 sm:px-4 py-2 rounded-xl text-xs font-bold transition-all touch-target ${
               searchMode === 'ai'
                 ? 'bg-[#35B86B] text-white shadow-sm'
                 : 'text-[#66756C] hover:text-[#102018]'
@@ -157,7 +157,7 @@ export function BrowseItemsPage() {
           </button>
           <button
             onClick={() => setSearchMode('filters')}
-            className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+            className={`flex items-center justify-center gap-1.5 px-3.5 sm:px-4 py-2 rounded-xl text-xs font-bold transition-all touch-target ${
               searchMode === 'filters'
                 ? 'bg-[#35B86B] text-white shadow-sm'
                 : 'text-[#66756C] hover:text-[#102018]'

@@ -69,29 +69,30 @@ export function ClaimModal({ item, isOpen, onClose, onSuccess }: ClaimModalProps
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#102018]/50 backdrop-blur-sm animate-in fade-in">
-      <div className="relative w-full max-w-xl rounded-3xl bg-white border border-[#E3ECE6] shadow-[0_24px_48px_-12px_rgba(22,138,74,0.16),0_12px_24px_-6px_rgba(16,32,24,0.06)] overflow-hidden flex flex-col max-h-[90vh]">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-[#102018]/50 backdrop-blur-sm animate-in fade-in overflow-y-auto">
+      <div className="relative w-full max-w-xl rounded-3xl bg-white border border-[#E3ECE6] shadow-[0_24px_48px_-12px_rgba(22,138,74,0.16),0_12px_24px_-6px_rgba(16,32,24,0.06)] overflow-hidden flex flex-col max-h-[92vh] my-auto">
         {/* Header */}
-        <div className="p-6 border-b border-[#E3ECE6] flex items-start justify-between bg-[#F7FBF8]">
-          <div className="flex items-center gap-3">
-            <div className="w-11 h-11 rounded-2xl bg-[#EEF8F1] border border-[#D5ECD9] flex items-center justify-center text-[#168A4A] shadow-sm">
-              <ShieldCheck className="w-6 h-6 text-[#35B86B]" />
+        <div className="p-4 sm:p-6 border-b border-[#E3ECE6] flex items-start justify-between bg-[#F7FBF8] shrink-0">
+          <div className="flex items-center gap-2.5 sm:gap-3 pr-2">
+            <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-2xl bg-[#EEF8F1] border border-[#D5ECD9] flex items-center justify-center text-[#168A4A] shadow-sm shrink-0">
+              <ShieldCheck className="w-5 h-5 sm:w-6 sm:h-6 text-[#35B86B]" />
             </div>
-            <div>
-              <h3 className="text-lg font-extrabold text-[#102018]">Verify That This is Your Item</h3>
-              <p className="text-xs text-[#66756C] font-medium">Claiming: <span className="text-[#168A4A] font-bold">{item.title}</span></p>
+            <div className="min-w-0">
+              <h3 className="text-base sm:text-lg font-extrabold text-[#102018] truncate">Verify Ownership</h3>
+              <p className="text-xs text-[#66756C] font-medium truncate">Claiming: <span className="text-[#168A4A] font-bold">{item.title}</span></p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-2 rounded-xl text-[#66756C] hover:text-[#102018] hover:bg-[#EEF8F1] transition-colors"
+            className="p-2 rounded-xl text-[#66756C] hover:text-[#102018] hover:bg-[#EEF8F1] transition-colors shrink-0 touch-target flex items-center justify-center"
+            aria-label="Close modal"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        {/* Modal Body / Form */}
-        <form onSubmit={handleSubmit} className="p-6 space-y-4 overflow-y-auto">
+        {/* Modal Body / Form (scrollable for keyboard safety) */}
+        <form onSubmit={handleSubmit} className="p-4 sm:p-6 space-y-4 overflow-y-auto flex-1">
           {error && (
             <div className="p-3.5 rounded-2xl bg-[#FFF1F2] border border-[#FFE4E6] text-[#E11D48] text-xs flex items-center gap-2 font-medium">
               <AlertCircle className="w-4 h-4 shrink-0" />
@@ -104,7 +105,7 @@ export function ClaimModal({ item, isOpen, onClose, onSuccess }: ClaimModalProps
             <Lock className="w-4 h-4 text-[#35B86B] shrink-0 mt-0.5" />
             <div className="leading-relaxed">
               <span className="font-bold text-[#168A4A]">Campus Verification Standard: </span>
-              Answer the questions below accurately to help the finder confirm that this property belongs to you.
+              Answer accurately to help the finder confirm that this property belongs to you.
             </div>
           </div>
 
@@ -168,7 +169,7 @@ export function ClaimModal({ item, isOpen, onClose, onSuccess }: ClaimModalProps
           </div>
 
           {/* Consent Checkbox */}
-          <label className="flex items-start gap-2.5 pt-2 cursor-pointer">
+          <label className="flex items-start gap-2.5 pt-1 cursor-pointer">
             <input
               type="checkbox"
               checked={contactConsent}
@@ -180,19 +181,19 @@ export function ClaimModal({ item, isOpen, onClose, onSuccess }: ClaimModalProps
             </span>
           </label>
 
-          {/* Actions */}
-          <div className="pt-4 border-t border-[#E3ECE6] flex items-center justify-end gap-3">
+          {/* Actions: Responsive Mobile Layout */}
+          <div className="pt-3 border-t border-[#E3ECE6] flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-end gap-2.5">
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2.5 rounded-xl text-xs font-bold text-[#66756C] hover:text-[#102018] hover:bg-[#F7FBF8] transition-colors"
+              className="px-4 py-2.5 rounded-xl text-xs font-bold text-[#66756C] hover:text-[#102018] hover:bg-[#F7FBF8] transition-colors touch-target text-center"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={isSubmitting}
-              className="btn-primary flex items-center gap-2 px-5 py-2.5 text-xs disabled:opacity-50"
+              className="btn-primary flex items-center justify-center gap-2 px-6 py-2.5 text-xs font-bold disabled:opacity-50 touch-target"
             >
               {isSubmitting ? (
                 <span>Submitting Verification...</span>

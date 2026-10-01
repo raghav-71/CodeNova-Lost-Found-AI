@@ -577,6 +577,20 @@ class SupabaseDatabaseService {
   }
 
   async getActiveClaim(itemId: string, claimantId: string): Promise<ClaimRecord | null> {
+    if (this.isPostgrestReady) {
+      try {
+        const { data, error } = await supabaseAdmin
+          .from('claims')
+          .select('*')
+          .eq('item_id', itemId)
+          .eq('claimant_id', claimantId)
+          .in('status', ['PENDING', 'APPROVED'])
+          .limit(1);
+        if (!error && data && data.length > 0) return data[0] as ClaimRecord;
+      } catch {
+        // fallback
+      }
+    }
     const claims = Array.from(this.memoryClaims.values()).filter(
       c => c.item_id === itemId && c.claimant_id === claimantId && ['PENDING', 'APPROVED'].includes(c.status)
     );
@@ -584,6 +598,20 @@ class SupabaseDatabaseService {
   }
 
   async getUserClaimForItem(itemId: string, claimantId: string): Promise<ClaimRecord | null> {
+    if (this.isPostgrestReady) {
+      try {
+        const { data, error } = await supabaseAdmin
+          .from('claims')
+          .select('*')
+          .eq('item_id', itemId)
+          .eq('claimant_id', claimantId)
+          .order('created_at', { ascending: false })
+          .limit(1);
+        if (!error && data && data.length > 0) return data[0] as ClaimRecord;
+      } catch {
+        // fallback
+      }
+    }
     const claims = Array.from(this.memoryClaims.values()).filter(
       c => c.item_id === itemId && c.claimant_id === claimantId
     );
@@ -591,6 +619,26 @@ class SupabaseDatabaseService {
   }
 
   async getClaimsForItem(itemId: string): Promise<ClaimRecord[]> {
+    if (this.isPostgrestReady) {
+      try {
+        const { data, error } = await supabaseAdmin
+          .from('claims')
+          .select('*, claimant:claimant_id(full_name, email, college, avatar_url)')
+          .eq('item_id', itemId)
+          .order('created_at', { ascending: false });
+        if (!error && data) {
+          return data.map((c: any) => ({
+            ...c,
+            claimant_name: c.claimant?.full_name || 'Campus Member',
+            claimant_email: c.claimant?.email,
+            claimant_campus: c.claimant?.college,
+            claimant_avatar: c.claimant?.avatar_url
+          }));
+        }
+      } catch {
+        // fallback
+      }
+    }
     const claims = Array.from(this.memoryClaims.values()).filter(c => c.item_id === itemId);
     return claims.map(c => {
       const claimant = this.memoryProfiles.get(c.claimant_id);
@@ -640,6 +688,31 @@ class SupabaseDatabaseService {
   }
 
   async getClaimsSubmittedByUser(claimantId: string): Promise<ClaimRecord[]> {
+    if (this.isPostgrestReady) {
+      try {
+        const { data, error } = await supabaseAdmin
+          .from('claims')
+          .select('*, items:item_id(title, type, category, location, primary_image, user_id, profiles:user_id(full_name, college))')
+          .eq('claimant_id', claimantId)
+          .order('created_at', { ascending: false });
+        if (!error && data) {
+          return data.map((c: any) => ({
+            ...c,
+            item_title: c.items?.title || 'Campus Item',
+            item_type: c.items?.type || 'FOUND',
+            item_category: c.items?.category,
+            item_location: c.items?.location,
+            item_image: c.items?.primary_image,
+            item_owner_id: c.items?.user_id,
+            reporter_name: c.items?.profiles?.full_name || 'Campus Finder',
+            reporter_campus: c.items?.profiles?.college || 'Central Campus'
+          }));
+        }
+      } catch {
+        // fallback
+      }
+    }
+
     const claims = Array.from(this.memoryClaims.values())
       .filter(c => c.claimant_id === claimantId)
       .sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
@@ -662,6 +735,48 @@ class SupabaseDatabaseService {
   }
 
   async getClaimsReceivedByUser(ownerId: string): Promise<ClaimRecord[]> {
+    if (this.isPostgrestReady) {
+      try {
+        const { data: userItems } = await supabaseAdmin
+          .from('items')
+          .select('id, title, type, category, location, primary_image, user_id')
+          .eq('user_id', ownerId);
+
+        if (userItems && userItems.length > 0) {
+          const itemMap = new Map(userItems.map(i => [i.id, i]));
+          const itemIds = userItems.map(i => i.id);
+          const { data: claimsData } = await supabaseAdmin
+            .from('claims')
+            .select('*, claimant:claimant_id(full_name, email, college, avatar_url)')
+            .in('item_id', itemIds)
+            .order('created_at', { ascending: false });
+
+          if (claimsData) {
+            return claimsData.map((c: any) => {
+              const item = itemMap.get(c.item_id);
+              return {
+                ...c,
+                item_title: item?.title || 'Campus Item',
+                item_type: item?.type || 'FOUND',
+                item_category: item?.category,
+                item_location: item?.location,
+                item_image: item?.primary_image,
+                item_owner_id: item?.user_id,
+                claimant_name: c.claimant?.full_name || 'Campus Claimant',
+                claimant_email: c.claimant?.email,
+                claimant_campus: c.claimant?.college || 'Central Campus',
+                claimant_avatar: c.claimant?.avatar_url
+              };
+            });
+          }
+        } else {
+          return [];
+        }
+      } catch {
+        // fallback
+      }
+    }
+
     const userItemIds = new Set(
       Array.from(this.memoryItems.values())
         .filter(i => i.user_id === ownerId)
@@ -696,6 +811,50 @@ class SupabaseDatabaseService {
     status: 'APPROVED' | 'REJECTED',
     resolutionNotes?: string
   ): Promise<ClaimRecord | null> {
+    if (this.isPostgrestReady) {
+      try {
+        const { data: claimData } = await supabaseAdmin
+          .from('claims')
+          .update({
+            status,
+            resolution_notes: resolutionNotes || null,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', claimId)
+          .select()
+          .single();
+
+        if (claimData) {
+          if (status === 'APPROVED') {
+            await supabaseAdmin.from('items').update({ status: 'RESOLVED', updated_at: new Date().toISOString() }).eq('id', claimData.item_id);
+            await supabaseAdmin
+              .from('claims')
+              .update({
+                status: 'REJECTED',
+                resolution_notes: 'Item resolved with another verified claimant.',
+                updated_at: new Date().toISOString()
+              })
+              .eq('item_id', claimData.item_id)
+              .neq('id', claimId)
+              .eq('status', 'PENDING');
+          } else {
+            const { data: pendingClaims } = await supabaseAdmin
+              .from('claims')
+              .select('id')
+              .eq('item_id', claimData.item_id)
+              .neq('id', claimId)
+              .eq('status', 'PENDING');
+            if (!pendingClaims || pendingClaims.length === 0) {
+              await supabaseAdmin.from('items').update({ status: 'ACTIVE', updated_at: new Date().toISOString() }).eq('id', claimData.item_id);
+            }
+          }
+          return claimData as ClaimRecord;
+        }
+      } catch {
+        // fallback
+      }
+    }
+
     const claim = this.memoryClaims.get(claimId);
     if (!claim) return null;
 
@@ -731,7 +890,6 @@ class SupabaseDatabaseService {
         }
       }
     } else {
-      // Recheck remaining pending claims on the item
       const item = this.memoryItems.get(claim.item_id);
       if (item && item.status === 'CLAIM_PENDING') {
         const remaining = Array.from(this.memoryClaims.values()).some(
@@ -752,6 +910,23 @@ class SupabaseDatabaseService {
   // NOTIFICATIONS
   // --------------------------------------------------------------------------
   async getNotifications(userId: string): Promise<{ notifications: NotificationRecord[]; unreadCount: number }> {
+    if (this.isPostgrestReady) {
+      try {
+        const { data, error } = await supabaseAdmin
+          .from('notifications')
+          .select('*')
+          .eq('user_id', userId)
+          .order('created_at', { ascending: false })
+          .limit(50);
+        if (!error && data) {
+          const unreadCount = data.filter((n: any) => !n.is_read).length;
+          return { notifications: data as NotificationRecord[], unreadCount };
+        }
+      } catch {
+        // fallback
+      }
+    }
+
     const userNotifs = Array.from(this.memoryNotifications.values())
       .filter(n => n.user_id === userId)
       .sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
@@ -765,11 +940,48 @@ class SupabaseDatabaseService {
       ...notif,
       created_at: new Date().toISOString()
     };
+
+    if (this.isPostgrestReady) {
+      try {
+        const { data, error } = await supabaseAdmin
+          .from('notifications')
+          .insert({
+            id: notif.id,
+            user_id: notif.user_id,
+            type: notif.type,
+            title: notif.title,
+            message: notif.message,
+            link_url: notif.link_url || null,
+            related_item_id: notif.related_item_id || null,
+            related_claim_id: notif.related_claim_id || null,
+            is_read: Boolean(notif.is_read)
+          })
+          .select()
+          .single();
+        if (!error && data) return data as NotificationRecord;
+      } catch {
+        // fallback
+      }
+    }
+
     this.memoryNotifications.set(created.id, created);
     return created;
   }
 
   async markNotificationRead(id: string, userId: string): Promise<boolean> {
+    if (this.isPostgrestReady) {
+      try {
+        const { error } = await supabaseAdmin
+          .from('notifications')
+          .update({ is_read: true })
+          .eq('id', id)
+          .eq('user_id', userId);
+        if (!error) return true;
+      } catch {
+        // fallback
+      }
+    }
+
     const notif = this.memoryNotifications.get(id);
     if (!notif || notif.user_id !== userId) return false;
     this.memoryNotifications.set(id, { ...notif, is_read: true });
@@ -777,6 +989,20 @@ class SupabaseDatabaseService {
   }
 
   async markAllNotificationsRead(userId: string): Promise<number> {
+    if (this.isPostgrestReady) {
+      try {
+        const { data, error } = await supabaseAdmin
+          .from('notifications')
+          .update({ is_read: true })
+          .eq('user_id', userId)
+          .eq('is_read', false)
+          .select('id');
+        if (!error && data) return data.length;
+      } catch {
+        // fallback
+      }
+    }
+
     let count = 0;
     for (const [id, notif] of this.memoryNotifications.entries()) {
       if (notif.user_id === userId && !notif.is_read) {
@@ -791,6 +1017,45 @@ class SupabaseDatabaseService {
   // POTENTIAL MATCHES
   // --------------------------------------------------------------------------
   async getPotentialMatchesForItem(itemId: string, type: 'LOST' | 'FOUND'): Promise<any[]> {
+    if (this.isPostgrestReady) {
+      try {
+        const col = type === 'LOST' ? 'lost_item_id' : 'found_item_id';
+        const opposingCol = type === 'LOST' ? 'found_item_id' : 'lost_item_id';
+        const { data: matches, error } = await supabaseAdmin
+          .from('potential_matches')
+          .select('*')
+          .eq(col, itemId)
+          .gte('match_score', 40)
+          .order('match_score', { ascending: false });
+
+        if (!error && matches && matches.length > 0) {
+          const otherItemIds = matches.map((m: any) => m[opposingCol]);
+          const { data: otherItems } = await supabaseAdmin
+            .from('items')
+            .select('*, profiles:user_id(full_name, college, avatar_url)')
+            .in('id', otherItemIds);
+
+          const otherItemMap = new Map((otherItems || []).map((i: any) => [i.id, i]));
+          return matches.map((m: any) => {
+            const otherItem = otherItemMap.get(m[opposingCol]);
+            return {
+              match_id: m.id,
+              match_score: m.match_score,
+              match_reasons: m.match_reasons,
+              matched_features: m.matched_features,
+              ai_evaluated: m.ai_evaluated,
+              match_status: m.status,
+              ...(otherItem || {}),
+              reporter_name: otherItem?.profiles?.full_name || 'Campus Member',
+              reporter_campus: otherItem?.profiles?.college || 'Central Campus'
+            };
+          });
+        }
+      } catch {
+        // fallback
+      }
+    }
+
     const matches = Array.from(this.memoryMatches.values()).filter(m => 
       (type === 'LOST' ? m.lost_item_id === itemId : m.found_item_id === itemId) && m.match_score >= 40
     );
@@ -814,10 +1079,42 @@ class SupabaseDatabaseService {
   }
 
   async savePotentialMatch(match: PotentialMatchRecord): Promise<void> {
+    if (this.isPostgrestReady) {
+      try {
+        await supabaseAdmin
+          .from('potential_matches')
+          .upsert({
+            id: match.id,
+            lost_item_id: match.lost_item_id,
+            found_item_id: match.found_item_id,
+            match_score: match.match_score,
+            match_reasons: match.match_reasons,
+            matched_features: match.matched_features,
+            ai_evaluated: Boolean(match.ai_evaluated),
+            status: match.status
+          }, { onConflict: 'lost_item_id,found_item_id' });
+      } catch {
+        // fallback
+      }
+    }
     this.memoryMatches.set(match.id, match);
   }
 
   async getExistingMatch(lostItemId: string, foundItemId: string): Promise<PotentialMatchRecord | null> {
+    if (this.isPostgrestReady) {
+      try {
+        const { data, error } = await supabaseAdmin
+          .from('potential_matches')
+          .select('*')
+          .eq('lost_item_id', lostItemId)
+          .eq('found_item_id', foundItemId)
+          .maybeSingle();
+        if (!error && data) return data as PotentialMatchRecord;
+      } catch {
+        // fallback
+      }
+    }
+
     for (const m of this.memoryMatches.values()) {
       if (m.lost_item_id === lostItemId && m.found_item_id === foundItemId) {
         return m;
@@ -838,6 +1135,36 @@ class SupabaseDatabaseService {
     potentialMatches: number;
     recoveryRate: number;
   }> {
+    if (this.isPostgrestReady) {
+      try {
+        const [lostRes, foundRes, resolvedRes, claimsRes, matchesRes] = await Promise.all([
+          supabaseAdmin.from('items').select('id', { count: 'exact', head: true }).eq('type', 'LOST'),
+          supabaseAdmin.from('items').select('id', { count: 'exact', head: true }).eq('type', 'FOUND'),
+          supabaseAdmin.from('items').select('id', { count: 'exact', head: true }).eq('status', 'RESOLVED'),
+          supabaseAdmin.from('claims').select('id', { count: 'exact', head: true }).eq('status', 'PENDING'),
+          supabaseAdmin.from('potential_matches').select('id', { count: 'exact', head: true })
+        ]);
+        const lostCount = lostRes.count || 0;
+        const foundCount = foundRes.count || 0;
+        const resolvedCount = resolvedRes.count || 0;
+        const totalItems = lostCount + foundCount;
+        const activeClaims = claimsRes.count || 0;
+        const potentialMatches = matchesRes.count || 0;
+        const recoveryRate = totalItems > 0 ? Math.round((resolvedCount / Math.max(1, lostCount)) * 100) : 0;
+        return {
+          itemsLost: lostCount,
+          itemsFound: foundCount,
+          totalItems,
+          resolvedItems: resolvedCount,
+          activeClaims,
+          potentialMatches,
+          recoveryRate: Math.min(100, Math.max(0, recoveryRate))
+        };
+      } catch {
+        // fallback
+      }
+    }
+
     const items = Array.from(this.memoryItems.values());
     const lostCount = items.filter(i => i.type === 'LOST').length;
     const foundCount = items.filter(i => i.type === 'FOUND').length;
@@ -868,6 +1195,50 @@ class SupabaseDatabaseService {
     unreadNotifications: number;
     recoveryRate: number;
   }> {
+    if (this.isPostgrestReady) {
+      try {
+        const [lostRes, foundRes, resolvedRes, claimsRes, notifsRes, userItems] = await Promise.all([
+          supabaseAdmin.from('items').select('id', { count: 'exact', head: true }).eq('user_id', userId).eq('type', 'LOST'),
+          supabaseAdmin.from('items').select('id', { count: 'exact', head: true }).eq('user_id', userId).eq('type', 'FOUND'),
+          supabaseAdmin.from('items').select('id', { count: 'exact', head: true }).eq('user_id', userId).eq('status', 'RESOLVED'),
+          supabaseAdmin.from('claims').select('id', { count: 'exact', head: true }).eq('claimant_id', userId).eq('status', 'PENDING'),
+          supabaseAdmin.from('notifications').select('id', { count: 'exact', head: true }).eq('user_id', userId).eq('is_read', false),
+          supabaseAdmin.from('items').select('id').eq('user_id', userId)
+        ]);
+
+        const itemsLost = lostRes.count || 0;
+        const itemsFound = foundRes.count || 0;
+        const resolvedItems = resolvedRes.count || 0;
+        const totalItems = itemsLost + itemsFound;
+        const activeClaims = claimsRes.count || 0;
+        const unreadNotifications = notifsRes.count || 0;
+
+        let potentialMatches = 0;
+        if (userItems.data && userItems.data.length > 0) {
+          const uids = userItems.data.map(i => i.id);
+          const { count: matchCount } = await supabaseAdmin
+            .from('potential_matches')
+            .select('id', { count: 'exact', head: true })
+            .or(`lost_item_id.in.(${uids.join(',')}),found_item_id.in.(${uids.join(',')})`);
+          potentialMatches = matchCount || 0;
+        }
+
+        const recoveryRate = totalItems > 0 ? Math.round((resolvedItems / Math.max(1, itemsLost)) * 100) : 0;
+        return {
+          itemsLost,
+          itemsFound,
+          totalItems,
+          resolvedItems,
+          activeClaims,
+          potentialMatches,
+          unreadNotifications,
+          recoveryRate: Math.min(100, Math.max(0, recoveryRate))
+        };
+      } catch {
+        // fallback
+      }
+    }
+
     const userItems = Array.from(this.memoryItems.values()).filter(i => i.user_id === userId);
     const itemsLost = userItems.filter(i => i.type === 'LOST').length;
     const itemsFound = userItems.filter(i => i.type === 'FOUND').length;
@@ -913,7 +1284,20 @@ class SupabaseDatabaseService {
   }
 
   // AI Matcher raw query helper
-  getAllActiveItemsForMatching(opposingType: 'LOST' | 'FOUND', targetItemId: string): ItemRecord[] {
+  async getAllActiveItemsForMatching(opposingType: 'LOST' | 'FOUND', targetItemId: string): Promise<ItemRecord[]> {
+    if (this.isPostgrestReady) {
+      try {
+        const { data } = await supabaseAdmin
+          .from('items')
+          .select('*')
+          .eq('type', opposingType)
+          .in('status', ['ACTIVE', 'MATCH_FOUND'])
+          .neq('id', targetItemId);
+        if (data) return data as ItemRecord[];
+      } catch {
+        // fallback
+      }
+    }
     return Array.from(this.memoryItems.values()).filter(
       i => i.type === opposingType && ['ACTIVE', 'MATCH_FOUND'].includes(i.status) && i.id !== targetItemId
     );

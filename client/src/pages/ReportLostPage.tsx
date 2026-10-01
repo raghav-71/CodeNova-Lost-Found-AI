@@ -17,7 +17,7 @@ import {
   FileText, 
   AlertCircle, 
   ArrowRight,
-  CheckCircle2
+  Camera
 } from 'lucide-react';
 
 const CATEGORIES: ItemCategory[] = [
@@ -69,8 +69,8 @@ export function ReportLostPage() {
   const [detectedConsistency, setDetectedConsistency] = useState<ConsistencyCheckResult | null>(null);
 
   const handleImageChange = (file: File) => {
-    if (!file.type.match(/^image\/(jpeg|jpg|png|webp)$/i)) {
-      setError('Please upload a valid JPG, PNG, or WebP image.');
+    if (!file.type.match(/^image\/(jpeg|jpg|png|webp|heic|heif)$/i) && !file.type.startsWith('image/')) {
+      setError('Please upload a valid image file (JPG, PNG, WebP).');
       return;
     }
     if (file.size > 10 * 1024 * 1024) {
@@ -185,7 +185,7 @@ export function ReportLostPage() {
   };
 
   return (
-    <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div className="max-w-4xl mx-auto px-3.5 sm:px-6 lg:px-8 py-6 sm:py-8">
       <div className="space-y-6">
         {/* Header */}
         <div className="space-y-2">
@@ -200,8 +200,8 @@ export function ReportLostPage() {
           </p>
         </div>
 
-        {/* Step Indicator Header */}
-        <div className="grid grid-cols-5 gap-2 p-3 bg-white border border-[#E3ECE6] rounded-2xl text-center text-xs font-bold shadow-sm">
+        {/* Step Indicator Header (Mobile-first responsive version) */}
+        <div className="hidden sm:grid sm:grid-cols-5 gap-2 p-3 bg-white border border-[#E3ECE6] rounded-2xl text-center text-xs font-bold shadow-sm">
           <div className="text-[#168A4A] bg-[#EEF8F1] py-1.5 rounded-xl border border-[#D5ECD9]">01 ITEM</div>
           <div className="text-[#168A4A] bg-[#EEF8F1] py-1.5 rounded-xl border border-[#D5ECD9]">02 DETAILS</div>
           <div className="text-[#168A4A] bg-[#EEF8F1] py-1.5 rounded-xl border border-[#D5ECD9]">03 LOCATION</div>
@@ -209,8 +209,17 @@ export function ReportLostPage() {
           <div className="text-[#35B86B] bg-[#E6F7EC] py-1.5 rounded-xl border border-[#35B86B]/30 font-extrabold">05 SUBMIT</div>
         </div>
 
+        {/* Compact Mobile Step Badge */}
+        <div className="sm:hidden flex items-center justify-between p-3 bg-white border border-[#E3ECE6] rounded-2xl shadow-sm text-xs font-bold">
+          <span className="text-[#168A4A] flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full bg-[#35B86B]"></span>
+            Lost Item Registration Form
+          </span>
+          <span className="text-[#66756C] text-[11px]">All fields encrypted</span>
+        </div>
+
         {/* Form Container */}
-        <form onSubmit={handleSubmit} className="space-y-6">
+        <form onSubmit={handleSubmit} className="space-y-5 sm:space-y-6">
           {error && (
             <div className="p-4 rounded-2xl bg-[#FFF1F2] border border-[#FFE4E6] text-[#E11D48] text-xs flex items-center gap-2 font-medium">
               <AlertCircle className="w-5 h-5 shrink-0" />
@@ -219,7 +228,7 @@ export function ReportLostPage() {
           )}
 
           {/* Section 1: Item Information */}
-          <div className="rounded-3xl bg-white border border-[#E3ECE6] p-6 sm:p-8 space-y-5 shadow-[0_10px_28px_-4px_rgba(22,138,74,0.06)]">
+          <div className="rounded-3xl bg-white border border-[#E3ECE6] p-4 sm:p-8 space-y-4 sm:space-y-5 shadow-[0_10px_28px_-4px_rgba(22,138,74,0.06)]">
             <h2 className="text-xs font-bold uppercase tracking-wider text-[#94A39B] flex items-center gap-2">
               <FileText className="w-4 h-4 text-[#35B86B]" />
               <span>1. Item Identification</span>
@@ -251,7 +260,7 @@ export function ReportLostPage() {
                     key={cat}
                     type="button"
                     onClick={() => setCategory(cat)}
-                    className={`py-2.5 px-3 rounded-xl text-xs font-bold border transition-all ${
+                    className={`py-2.5 px-3 rounded-xl text-xs font-bold border transition-all touch-target flex items-center justify-center ${
                       category === cat
                         ? 'bg-[#EEF8F1] text-[#168A4A] border-[#35B86B] shadow-sm'
                         : 'bg-[#F7FBF8] text-[#66756C] hover:text-[#102018] border-[#E3ECE6]'
@@ -293,8 +302,8 @@ export function ReportLostPage() {
             </div>
           </div>
 
-          {/* Section 2: Location and Timeline */}
-          <div className="rounded-3xl bg-white border border-[#E3ECE6] p-6 sm:p-8 space-y-5 shadow-[0_10px_28px_-4px_rgba(22,138,74,0.06)]">
+          {/* Section 2: Location and Timeline (Single column on mobile) */}
+          <div className="rounded-3xl bg-white border border-[#E3ECE6] p-4 sm:p-8 space-y-4 sm:space-y-5 shadow-[0_10px_28px_-4px_rgba(22,138,74,0.06)]">
             <h2 className="text-xs font-bold uppercase tracking-wider text-[#94A39B] flex items-center gap-2">
               <MapPin className="w-4 h-4 text-[#35B86B]" />
               <span>2. Campus Location & Incident Timeline</span>
@@ -374,8 +383,8 @@ export function ReportLostPage() {
             </div>
           </div>
 
-          {/* Section 3: Image Upload */}
-          <div className="rounded-3xl bg-white border border-[#E3ECE6] p-6 sm:p-8 space-y-5 shadow-[0_10px_28px_-4px_rgba(22,138,74,0.06)]">
+          {/* Section 3: Image Upload (Mobile Camera + Photo Library supported) */}
+          <div className="rounded-3xl bg-white border border-[#E3ECE6] p-4 sm:p-8 space-y-4 sm:space-y-5 shadow-[0_10px_28px_-4px_rgba(22,138,74,0.06)]">
             <h2 className="text-xs font-bold uppercase tracking-wider text-[#94A39B] flex items-center gap-2">
               <ImageIcon className="w-4 h-4 text-[#35B86B]" />
               <span>3. Image & Photo Reference</span>
@@ -390,23 +399,24 @@ export function ReportLostPage() {
                     setImageFile(null);
                     setImagePreview(null);
                   }}
-                  className="absolute top-3 right-3 p-1.5 rounded-full bg-white/90 hover:bg-[#E11D48] hover:text-white text-[#102018] transition-colors shadow-sm"
+                  className="absolute top-3 right-3 w-10 h-10 rounded-full bg-white/95 hover:bg-[#E11D48] hover:text-white text-[#102018] transition-colors shadow-md flex items-center justify-center touch-target"
+                  aria-label="Remove photo"
                 >
-                  <X className="w-4 h-4" />
+                  <X className="w-5 h-5" />
                 </button>
               </div>
             ) : (
-              <label className="border-2 border-dashed border-[#C7EED4] hover:border-[#35B86B] rounded-3xl p-8 flex flex-col items-center justify-center cursor-pointer bg-[#F7FBF8] hover:bg-[#EEF8F1] transition-all group">
+              <label className="border-2 border-dashed border-[#C7EED4] hover:border-[#35B86B] rounded-3xl p-6 sm:p-8 flex flex-col items-center justify-center cursor-pointer bg-[#F7FBF8] hover:bg-[#EEF8F1] transition-all group">
                 <div className="w-12 h-12 rounded-2xl bg-white text-[#35B86B] border border-[#D5ECD9] flex items-center justify-center mb-3 shadow-sm group-hover:scale-110 transition-transform">
-                  <Upload className="w-6 h-6" />
+                  <Camera className="w-6 h-6" />
                 </div>
-                <div className="text-sm font-bold text-[#102018] text-center">
-                  Drag & drop item photo, or <span className="text-[#168A4A] underline">browse files</span>
+                <div className="text-xs sm:text-sm font-bold text-[#102018] text-center">
+                  Take photo with camera or <span className="text-[#168A4A] underline">browse files</span>
                 </div>
-                <div className="text-xs text-[#66756C] mt-1 font-medium">Supports JPG, PNG, WebP up to 10MB</div>
+                <div className="text-[11px] sm:text-xs text-[#66756C] mt-1 font-medium">Supports JPG, PNG, WebP up to 10MB</div>
                 <input
                   type="file"
-                  accept="image/jpeg,image/png,image/webp"
+                  accept="image/jpeg,image/png,image/webp,image/*"
                   onChange={(e) => {
                     if (e.target.files && e.target.files[0]) {
                       handleImageChange(e.target.files[0]);
@@ -423,7 +433,7 @@ export function ReportLostPage() {
             <button
               type="submit"
               disabled={isSubmitting}
-              className="btn-primary w-full py-4 text-sm font-bold flex items-center justify-center gap-2 shadow-lg shadow-[#35B86B]/30 disabled:opacity-50"
+              className="btn-primary w-full py-4 text-sm font-bold flex items-center justify-center gap-2 shadow-lg shadow-[#35B86B]/30 disabled:opacity-50 touch-target"
             >
               {isSubmitting ? (
                 <div className="flex items-center gap-2">
@@ -449,7 +459,6 @@ export function ReportLostPage() {
             isSubmitting={isSubmitting}
             onEditDetails={() => {
               setMismatchModalOpen(false);
-              // Focus user back to review details
             }}
             onContinueAnyway={() => {
               executeSubmission();
