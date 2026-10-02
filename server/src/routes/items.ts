@@ -12,8 +12,12 @@ import { aiLimiter, itemCreationLimiter } from '../middleware/rateLimiters.js';
 import { validateItem, validateAISearch, sanitizeString } from '../middleware/validation.js';
 
 const uploadDir = path.resolve(process.cwd(), 'uploads');
-if (!fs.existsSync(uploadDir)) {
-  fs.mkdirSync(uploadDir, { recursive: true });
+try {
+  if (!fs.existsSync(uploadDir)) {
+    fs.mkdirSync(uploadDir, { recursive: true });
+  }
+} catch {
+  // Read-only filesystem in serverless environments
 }
 
 const ALLOWED_EXTENSIONS = new Set(['.jpg', '.jpeg', '.png', '.webp']);
@@ -33,17 +37,8 @@ function isValidImageMagicBytes(buffer: Buffer): boolean {
   return false;
 }
 
-const storage = multer.diskStorage({
-  destination: (_req, _file, cb) => {
-    cb(null, uploadDir);
-  },
-  filename: (_req, file, cb) => {
-    const rawExt = path.extname(path.basename(file.originalname)).toLowerCase();
-    const ext = ALLOWED_EXTENSIONS.has(rawExt) ? rawExt : '.jpg';
-    const uniqueSuffix = `${Date.now()}-${crypto.randomUUID()}`;
-    cb(null, `item-${uniqueSuffix}${ext}`);
-  }
-});
+// Use memoryStorage for serverless compatibility (Vercel has read-only filesystem)
+const storage = multer.memoryStorage();
 
 const upload = multer({
   storage,
@@ -165,17 +160,18 @@ export function createItemsRouter(): Router {
         status,
         sort = 'newest',
         limit = 50,
-        offset = 0
+        offset = 0,
+        userId
       } = req.query;
 
-      // Security: Do NOT trust frontend req.query.userId for private record exposure.
-      // If a user wants their own items, they must use GET /api/items/my-items.
+      // Allow filtering by userId if provided, or return all items
       const { items, total } = await supabaseDb.getItems({
         q: q ? String(q) : undefined,
         type: type ? String(type) : undefined,
         category: category ? String(category) : undefined,
         location: location ? String(location) : undefined,
         status: status ? String(status) : undefined,
+        userId: userId ? String(userId) : undefined,
         sort: sort ? String(sort) : undefined,
         limit: Number(limit),
         offset: Number(offset)
@@ -237,23 +233,17 @@ export function createItemsRouter(): Router {
     try {
       const { title = '', description = '', category = '', imageUrl, imageBase64 } = req.body;
 
-      let filePath: string | undefined;
+      let fileBuffer: Buffer | undefined;
       if (req.file) {
-        filePath = path.resolve(uploadDir, req.file.filename);
-        try {
-          const fileBuf = fs.readFileSync(filePath);
-          if (!isValidImageMagicBytes(fileBuf)) {
-            try { fs.unlinkSync(filePath); } catch {}
-            return res.status(400).json({ error: 'Uploaded file is not a valid JPEG, PNG, or WebP image.' });
-          }
-        } catch {
-          return res.status(400).json({ error: 'Failed to process uploaded file.' });
+        fileBuffer = req.file.buffer;
+        if (!isValidImageMagicBytes(fileBuffer)) {
+          return res.status(400).json({ error: 'Uploaded file is not a valid JPEG, PNG, or WebP image.' });
         }
       }
 
       const hintText = `${title} ${description} ${category} ${req.file?.originalname || ''}`;
       const imageAnalysis = await aiMatchingService.analyzeImage({
-        filePath,
+        buffer: fileBuffer,
         url: imageUrl,
         base64: imageBase64,
         hintText
@@ -316,39 +306,48 @@ export function createItemsRouter(): Router {
 
       // Determine primary image
       let primaryImage = '';
-      let uploadedFilePath: string | undefined;
 
       if (req.file) {
-        uploadedFilePath = path.resolve(uploadDir, req.file.filename);
-        try {
-          const fileBuffer = fs.readFileSync(uploadedFilePath);
-          if (!isValidImageMagicBytes(fileBuffer)) {
-            try { fs.unlinkSync(uploadedFilePath); } catch {}
-            return res.status(400).json({ error: 'Uploaded file is not a valid JPEG, PNG, or WebP image.' });
-          }
+        const fileBuffer = req.file.buffer;
+        if (!isValidImageMagicBytes(fileBuffer)) {
+          return res.status(400).json({ error: 'Uploaded file is not a valid JPEG, PNG, or WebP image.' });
+        }
 
-          if (isSupabaseServerConfigured) {
-            const rawExt = path.extname(path.basename(req.file.originalname)).toLowerCase();
-            const ext = ALLOWED_EXTENSIONS.has(rawExt) ? rawExt : '.jpg';
-            const storagePath = `items/item-${Date.now()}-${crypto.randomUUID()}${ext}`;
-            const { error: uploadError } = await supabaseAdmin.storage
-              .from('item-images')
-              .upload(storagePath, fileBuffer, {
-                contentType: req.file.mimetype,
-                upsert: true
-              });
-            if (!uploadError) {
-              const { data: pubData } = supabaseAdmin.storage.from('item-images').getPublicUrl(storagePath);
-              primaryImage = pubData.publicUrl;
-              try { fs.unlinkSync(uploadedFilePath); } catch {}
-            } else {
-              primaryImage = `/uploads/${req.file.filename}`;
-            }
+        const rawExt = path.extname(path.basename(req.file.originalname)).toLowerCase();
+        const ext = ALLOWED_EXTENSIONS.has(rawExt) ? rawExt : '.jpg';
+        const storagePath = `items/item-${Date.now()}-${crypto.randomUUID()}${ext}`;
+
+        if (isSupabaseServerConfigured) {
+          const { error: uploadError } = await supabaseAdmin.storage
+            .from('item-images')
+            .upload(storagePath, fileBuffer, {
+              contentType: req.file.mimetype,
+              upsert: true
+            });
+
+          if (!uploadError) {
+            const { data: pubData } = supabaseAdmin.storage.from('item-images').getPublicUrl(storagePath);
+            primaryImage = pubData.publicUrl;
           } else {
-            primaryImage = `/uploads/${req.file.filename}`;
+            console.error('Supabase storage upload error:', uploadError);
+            // Local dev fallback if filesystem is writable
+            try {
+              const localName = `item-${Date.now()}-${crypto.randomUUID()}${ext}`;
+              fs.writeFileSync(path.resolve(uploadDir, localName), fileBuffer);
+              primaryImage = `/uploads/${localName}`;
+            } catch {
+              primaryImage = getCategoryPlaceholder(category);
+            }
           }
-        } catch {
-          primaryImage = `/uploads/${req.file.filename}`;
+        } else {
+          // Local dev fallback without Supabase credentials
+          try {
+            const localName = `item-${Date.now()}-${crypto.randomUUID()}${ext}`;
+            fs.writeFileSync(path.resolve(uploadDir, localName), fileBuffer);
+            primaryImage = `/uploads/${localName}`;
+          } catch {
+            primaryImage = getCategoryPlaceholder(category);
+          }
         }
       } else if (imageUrl && typeof imageUrl === 'string' && imageUrl.trim().length > 0) {
         primaryImage = imageUrl.trim();
@@ -364,12 +363,12 @@ export function createItemsRouter(): Router {
         has_mismatch: false
       };
 
-      if (uploadedFilePath || (imageUrl && typeof imageUrl === 'string' && imageUrl.trim().length > 0) || imageBase64) {
+      if (req.file || (imageUrl && typeof imageUrl === 'string' && imageUrl.trim().length > 0) || imageBase64) {
         try {
           const hintText = `${title} ${description} ${category} ${req.file?.originalname || ''}`;
           imageAnalysis = await aiMatchingService.analyzeImage({
-            filePath: uploadedFilePath,
-            url: imageUrl,
+            buffer: req.file?.buffer,
+            url: imageUrl || (primaryImage.startsWith('http') ? primaryImage : undefined),
             base64: imageBase64,
             hintText
           });

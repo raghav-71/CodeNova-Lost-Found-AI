@@ -50,7 +50,7 @@ export function createClaimsRouter(): Router {
       // Rule 3: Self-claim check (User cannot claim their own reported found item)
       if (item.user_id === req.user!.id) {
         return res.status(400).json({
-          error: 'You cannot claim an item you reported as found.'
+          error: 'You cannot claim an item you reported as found. You cannot claim your own reported item.'
         });
       }
 

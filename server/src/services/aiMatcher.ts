@@ -723,6 +723,7 @@ export class AIMatchingService {
   // =========================================================================
 
   async analyzeImage(imageInput: {
+    buffer?: Buffer;
     filePath?: string;
     base64?: string;
     url?: string;
@@ -730,7 +731,7 @@ export class AIMatchingService {
     hintText?: string;
   }): Promise<AIImageAnalysis> {
     const cacheKey = crypto.createHash('sha256')
-      .update(imageInput.base64 || imageInput.filePath || imageInput.url || imageInput.hintText || '')
+      .update(imageInput.base64 || (imageInput.buffer ? imageInput.buffer.subarray(0, 1024) : '') || imageInput.filePath || imageInput.url || imageInput.hintText || '')
       .digest('hex');
 
     if (this.imageCache.has(cacheKey)) {
@@ -770,6 +771,13 @@ export class AIMatchingService {
       inlineParts = [{
         inlineData: {
           data: imageInput.base64.replace(/^data:image\/\w+;base64,/, ''),
+          mimeType: imageInput.mimeType || 'image/jpeg'
+        }
+      }];
+    } else if (imageInput.buffer) {
+      inlineParts = [{
+        inlineData: {
+          data: imageInput.buffer.toString('base64'),
           mimeType: imageInput.mimeType || 'image/jpeg'
         }
       }];

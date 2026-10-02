@@ -10,6 +10,8 @@ server/dist/
 !.env.example
 server/data/
 server/uploads/
+uploads/
+.vercel
 
 # Logs and local tooling
 *.log

@@ -1025,12 +1025,15 @@ class SupabaseDatabaseService {
   async markNotificationRead(id: string, userId: string): Promise<boolean> {
     if (this.isPostgrestReady) {
       try {
-        const { error } = await supabaseAdmin
+        const { data, error } = await supabaseAdmin
           .from('notifications')
           .update({ is_read: true })
           .eq('id', id)
-          .eq('user_id', userId);
-        if (!error) return true;
+          .eq('user_id', userId)
+          .select('id');
+        if (!error && data) {
+          return data.length > 0;
+        }
       } catch {
         // fallback
       }
