@@ -21,9 +21,17 @@
     "@types/express": "^4.17.21",
     "@types/node": "^22.13.4",
     "concurrently": "^9.1.2",
-    "typescript": "^5.7.3"
+    "typescript": "^5.8.3"
   },
-  "keywords": ["lost-and-found", "ai", "campus", "react", "nodejs", "gemini", "findit-ai"],
+  "keywords": [
+    "lost-and-found",
+    "ai",
+    "campus",
+    "react",
+    "nodejs",
+    "gemini",
+    "findit-ai"
+  ],
   "author": "FindIt AI Team",
   "license": "MIT"
 }
