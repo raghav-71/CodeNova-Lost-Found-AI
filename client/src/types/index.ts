@@ -120,6 +120,7 @@ export interface PotentialMatch {
   match_id: string;
   lost_item_id?: string;
   found_item_id?: string;
+  origin_item_id?: string;
   match_score: number;
   match_reasons: string[];
   matched_features: string[];

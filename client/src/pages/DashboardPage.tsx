@@ -5,6 +5,7 @@ import { api } from '../services/api.js';
 import { Item, PotentialMatch } from '../types/index.js';
 import { ItemCard } from '../components/ItemCard.js';
 import { AIMatchCard } from '../components/AIMatchCard.js';
+import { MatchDetailsModal } from '../components/MatchDetailsModal.js';
 import { ClaimModal } from '../components/ClaimModal.js';
 import { StatsSkeleton, CardSkeleton } from '../components/SkeletonLoader.js';
 import { 
@@ -37,8 +38,8 @@ export function DashboardPage() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'my-items' | 'recent-reports'>('my-items');
   const [recentReports, setRecentReports] = useState<Item[]>([]);
-  
   const [claimModalItem, setClaimModalItem] = useState<PotentialMatch | null>(null);
+  const [selectedMatchForModal, setSelectedMatchForModal] = useState<PotentialMatch | null>(null);
 
   useEffect(() => {
     loadDashboardData();
@@ -66,19 +67,14 @@ export function DashboardPage() {
       const recentRes = await api.getItems({ limit: 6 });
       setRecentReports(recentRes.items || []);
 
-      // 4. Fetch potential matches belonging strictly to the user's reported items
-      const matchesGathered: PotentialMatch[] = [];
-      for (const item of userReportedItems.slice(0, 6)) {
-        try {
-          const detailRes = await api.getItemById(item.id);
-          if (detailRes.matches && detailRes.matches.length > 0) {
-            matchesGathered.push(...detailRes.matches);
-          }
-        } catch {
-          // continue
-        }
+      // 4. Fetch potential matches belonging strictly to the user's reported items (single query)
+      try {
+        const matchesRes = await api.getMyMatches();
+        setRecentMatches(matchesRes.matches || []);
+      } catch (matchErr) {
+        console.warn('Failed to load my matches:', matchErr);
+        setRecentMatches([]);
       }
-      setRecentMatches(matchesGathered);
     } catch (err: any) {
       console.error('Failed to load dashboard data:', err);
       setLoadError('Unable to load your dashboard. Please try again.');
@@ -208,30 +204,36 @@ export function DashboardPage() {
       ) : null}
 
       {/* AI Potential Matches Spotlight */}
-      {recentMatches.length > 0 && (
-        <div className="space-y-3 sm:space-y-4">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-xl bg-[#EEF8F1] border border-[#D5ECD9] flex items-center justify-center text-[#168A4A] shrink-0">
-              <Sparkles className="w-4 h-4 text-[#35B86B]" />
-            </div>
-            <div>
-              <h2 className="text-base sm:text-lg font-bold text-[#102018] tracking-tight">AI Potential Match Discoveries</h2>
-              <p className="text-xs text-[#66756C] font-medium">High-confidence similarities discovered on your reports</p>
-            </div>
+      <div className="space-y-3 sm:space-y-4">
+        <div className="flex items-center gap-2.5">
+          <div className="w-8 h-8 rounded-xl bg-[#EEF8F1] border border-[#D5ECD9] flex items-center justify-center text-[#168A4A] shrink-0">
+            <Sparkles className="w-4 h-4 text-[#35B86B]" />
           </div>
+          <div>
+            <h2 className="text-base sm:text-lg font-bold text-[#102018] tracking-tight">AI Potential Match Discoveries</h2>
+            <p className="text-xs text-[#66756C] font-medium">Automatic cross-user matching on your reports</p>
+          </div>
+        </div>
 
+        {recentMatches.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
             {recentMatches.map((m) => (
               <AIMatchCard
                 key={m.match_id}
                 match={m}
-                originItemId={m.lost_item_id || m.found_item_id || ''}
+                originItemId={m.origin_item_id || m.lost_item_id || m.found_item_id || ''}
                 onClaimClick={(itemToClaim) => setClaimModalItem(itemToClaim)}
+                onViewDetails={(itemToView) => setSelectedMatchForModal(itemToView)}
               />
             ))}
           </div>
-        </div>
-      )}
+        ) : (
+          <div className="rounded-2xl bg-white border border-[#E3ECE6] p-6 text-center space-y-2">
+            <p className="text-sm font-bold text-[#102018]">No potential matches yet.</p>
+            <p className="text-xs text-[#66756C]">FindIt AI will automatically check new reports for you in the background.</p>
+          </div>
+        )}
+      </div>
 
       {/* Main Content Tabs */}
       <div className="space-y-4">
@@ -318,6 +320,20 @@ export function DashboardPage() {
           </div>
         )}
       </div>
+
+      {/* Match Details Side-by-Side Modal */}
+      {selectedMatchForModal && (
+        <MatchDetailsModal
+          isOpen={true}
+          match={selectedMatchForModal}
+          originItem={myItems.find(i => i.id === selectedMatchForModal.origin_item_id || i.id === selectedMatchForModal.lost_item_id || i.id === selectedMatchForModal.found_item_id) || null}
+          onClose={() => setSelectedMatchForModal(null)}
+          onClaimClick={(itemToClaim) => {
+            setSelectedMatchForModal(null);
+            setClaimModalItem(itemToClaim);
+          }}
+        />
+      )}
 
       {/* Claim Modal */}
       {claimModalItem && (

@@ -8,9 +8,10 @@ interface AIMatchCardProps {
   match: PotentialMatch;
   originItemId: string;
   onClaimClick?: (matchItem: PotentialMatch) => void;
+  onViewDetails?: (matchItem: PotentialMatch) => void;
 }
 
-export function AIMatchCard({ match, originItemId, onClaimClick }: AIMatchCardProps) {
+export function AIMatchCard({ match, originItemId, onClaimClick, onViewDetails }: AIMatchCardProps) {
   const getImageUrl = (url?: string) => {
     if (!url) return 'https://images.unsplash.com/photo-1586769852044-692d6e3703f0?w=600&auto=format&fit=crop&q=80';
     if (url.startsWith('http')) return url;
@@ -117,21 +118,32 @@ export function AIMatchCard({ match, originItemId, onClaimClick }: AIMatchCardPr
       </div>
 
       {/* Action Footer */}
-      <div className="mt-4 pt-3 border-t border-[#E3ECE6] flex items-center justify-between gap-3">
-        <Link
-          to={`/items/${match.id}`}
-          className="text-xs font-bold text-[#168A4A] hover:text-[#116B3A] flex items-center gap-1 transition-colors"
-        >
-          <span>Inspect Item Record</span>
-          <ArrowUpRight className="w-3.5 h-3.5" />
-        </Link>
+      <div className="mt-4 pt-3 border-t border-[#E3ECE6] flex flex-wrap items-center justify-between gap-2.5">
+        <div className="flex items-center gap-3">
+          {onViewDetails && (
+            <button
+              onClick={() => onViewDetails(match)}
+              className="text-xs font-bold text-[#168A4A] hover:text-[#116B3A] flex items-center gap-1 transition-colors"
+            >
+              <span>View Match</span>
+              <ArrowUpRight className="w-3.5 h-3.5" />
+            </button>
+          )}
+
+          <Link
+            to={`/items/${match.id}`}
+            className="text-xs font-medium text-[#66756C] hover:text-[#102018] flex items-center gap-1 transition-colors"
+          >
+            <span>Inspect Item</span>
+          </Link>
+        </div>
 
         {onClaimClick && match.type === 'FOUND' && (
           <button
             onClick={() => onClaimClick(match)}
-            className="btn-primary px-3.5 py-1.5 text-xs"
+            className="btn-primary px-3.5 py-1.5 text-xs shadow-sm shadow-[#35B86B]/20"
           >
-            Claim This Match
+            Claim Item
           </button>
         )}
       </div>

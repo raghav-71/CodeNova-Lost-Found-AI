@@ -244,6 +244,15 @@ class ApiClient {
     });
   }
 
+  // Potential Matches endpoints
+  async getMyMatches() {
+    return this.request<{ total: number; matches: any[] }>('/items/my-matches');
+  }
+
+  async getMatchDetails(matchId: string) {
+    return this.request<{ match: any; lostItem: any; foundItem: any; isOwner: boolean }>(`/items/matches/${matchId}`);
+  }
+
   // Claims endpoints (Simplified Recovery Flow)
   async submitClaim(claimData: {
     itemId: string;

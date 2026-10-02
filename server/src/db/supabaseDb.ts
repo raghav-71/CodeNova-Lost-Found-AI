@@ -1094,6 +1094,8 @@ class SupabaseDatabaseService {
             const otherItem = otherItemMap.get(m[opposingCol]);
             return {
               match_id: m.id,
+              lost_item_id: m.lost_item_id,
+              found_item_id: m.found_item_id,
               match_score: m.match_score,
               match_reasons: m.match_reasons,
               matched_features: m.matched_features,
@@ -1120,6 +1122,8 @@ class SupabaseDatabaseService {
       const reporter = otherItem ? this.memoryProfiles.get(otherItem.user_id) : null;
       return {
         match_id: m.id,
+        lost_item_id: m.lost_item_id,
+        found_item_id: m.found_item_id,
         match_score: m.match_score,
         match_reasons: m.match_reasons,
         matched_features: m.matched_features,
@@ -1345,6 +1349,252 @@ class SupabaseDatabaseService {
 
   private countClaimsForItem(itemId: string): number {
     return Array.from(this.memoryClaims.values()).filter(c => c.item_id === itemId).length;
+  }
+
+  // AI Matcher candidate pre-filtering query helper
+  async findEligibleCandidatesForMatchAlert(targetItem: ItemRecord, limit: number = 25): Promise<ItemRecord[]> {
+    const opposingType: 'LOST' | 'FOUND' = targetItem.type === 'LOST' ? 'FOUND' : 'LOST';
+
+    if (this.isPostgrestReady) {
+      try {
+        // Query eligible candidates: opposite type, active/match_found, cross-user only, not same id
+        let query = supabaseAdmin
+          .from('items')
+          .select('*')
+          .eq('type', opposingType)
+          .in('status', ['ACTIVE', 'MATCH_FOUND'])
+          .neq('user_id', targetItem.user_id)
+          .neq('id', targetItem.id);
+
+        // Prioritize same category if possible, or fetch top candidates
+        const { data, error } = await query
+          .order('created_at', { ascending: false })
+          .limit(limit * 2);
+
+        if (!error && data && data.length > 0) {
+          // Pre-rank candidates based on category/location/title overlap
+          const targetCategory = targetItem.category?.toLowerCase() || '';
+          const targetLocation = targetItem.location?.toLowerCase() || '';
+          const targetTitleWords = targetItem.title.toLowerCase().split(/\s+/).filter(w => w.length > 2);
+
+          const scored = (data as ItemRecord[]).map(c => {
+            let score = 0;
+            if (c.category && c.category.toLowerCase() === targetCategory) score += 40;
+            if (c.location && targetLocation && (c.location.toLowerCase().includes(targetLocation) || targetLocation.includes(c.location.toLowerCase()))) score += 30;
+            const cText = `${c.title} ${c.description}`.toLowerCase();
+            for (const word of targetTitleWords) {
+              if (cText.includes(word)) score += 15;
+            }
+            return { item: c, score };
+          });
+
+          scored.sort((a, b) => b.score - a.score);
+          return scored.slice(0, limit).map(s => s.item);
+        }
+      } catch (err) {
+        console.warn('[Supabase DB] Error in findEligibleCandidatesForMatchAlert:', err);
+      }
+    }
+
+    // In-memory fallback
+    const targetCategory = targetItem.category?.toLowerCase() || '';
+    const targetLocation = targetItem.location?.toLowerCase() || '';
+    const targetTitleWords = targetItem.title.toLowerCase().split(/\s+/).filter(w => w.length > 2);
+
+    const candidates = Array.from(this.memoryItems.values()).filter(
+      i => i.type === opposingType &&
+           ['ACTIVE', 'MATCH_FOUND'].includes(i.status) &&
+           i.user_id !== targetItem.user_id &&
+           i.id !== targetItem.id
+    );
+
+    const scored = candidates.map(c => {
+      let score = 0;
+      if (c.category && c.category.toLowerCase() === targetCategory) score += 40;
+      if (c.location && targetLocation && (c.location.toLowerCase().includes(targetLocation) || targetLocation.includes(c.location.toLowerCase()))) score += 30;
+      const cText = `${c.title} ${c.description}`.toLowerCase();
+      for (const word of targetTitleWords) {
+        if (cText.includes(word)) score += 15;
+      }
+      return { item: c, score };
+    });
+
+    scored.sort((a, b) => b.score - a.score);
+    return scored.slice(0, limit).map(s => s.item);
+  }
+
+  // Get all potential matches for a user across all their reported items (single query to avoid N+1)
+  async getPotentialMatchesForUser(userId: string): Promise<any[]> {
+    if (this.isPostgrestReady) {
+      try {
+        const { data: userItems, error: itemsError } = await supabaseAdmin
+          .from('items')
+          .select('id, type')
+          .eq('user_id', userId);
+
+        if (itemsError || !userItems || userItems.length === 0) {
+          return [];
+        }
+
+        const userItemIds = userItems.map(i => i.id);
+        const userItemTypeMap = new Map(userItems.map(i => [i.id, i.type]));
+
+        const { data: matches, error: matchesError } = await supabaseAdmin
+          .from('potential_matches')
+          .select('*')
+          .or(`lost_item_id.in.(${userItemIds.join(',')}),found_item_id.in.(${userItemIds.join(',')})`)
+          .gte('match_score', 40)
+          .order('match_score', { ascending: false });
+
+        if (matchesError || !matches || matches.length === 0) {
+          return [];
+        }
+
+        // Identify other items to hydrate
+        const otherItemIds = matches.map((m: any) => {
+          return userItemIds.includes(m.lost_item_id) ? m.found_item_id : m.lost_item_id;
+        });
+
+        const { data: otherItems } = await supabaseAdmin
+          .from('items')
+          .select('*, profiles:user_id(full_name, college, avatar_url)')
+          .in('id', otherItemIds);
+
+        const otherItemMap = new Map((otherItems || []).map((i: any) => [i.id, i]));
+
+        return matches.map((m: any) => {
+          const isMyLost = userItemIds.includes(m.lost_item_id);
+          const myItemId = isMyLost ? m.lost_item_id : m.found_item_id;
+          const otherItemId = isMyLost ? m.found_item_id : m.lost_item_id;
+          const otherItem = otherItemMap.get(otherItemId);
+
+          return {
+            match_id: m.id,
+            lost_item_id: m.lost_item_id,
+            found_item_id: m.found_item_id,
+            origin_item_id: myItemId,
+            match_score: m.match_score,
+            match_reasons: m.match_reasons,
+            matched_features: m.matched_features,
+            ai_evaluated: m.ai_evaluated,
+            match_status: m.status,
+            created_at: m.created_at,
+            ...(otherItem || {}),
+            reporter_name: otherItem?.profiles?.full_name || 'Campus Member',
+            reporter_campus: otherItem?.profiles?.college || 'Central Campus'
+          };
+        });
+      } catch (err) {
+        console.warn('[Supabase DB] Error in getPotentialMatchesForUser:', err);
+      }
+    }
+
+    // In-memory fallback
+    const userItems = Array.from(this.memoryItems.values()).filter(i => i.user_id === userId);
+    const userItemIds = new Set(userItems.map(i => i.id));
+    if (userItemIds.size === 0) return [];
+
+    const matches = Array.from(this.memoryMatches.values()).filter(
+      m => (userItemIds.has(m.lost_item_id) || userItemIds.has(m.found_item_id)) && m.match_score >= 40
+    );
+
+    return matches.map(m => {
+      const isMyLost = userItemIds.has(m.lost_item_id);
+      const myItemId = isMyLost ? m.lost_item_id : m.found_item_id;
+      const otherId = isMyLost ? m.found_item_id : m.lost_item_id;
+      const otherItem = this.memoryItems.get(otherId);
+      const reporter = otherItem ? this.memoryProfiles.get(otherItem.user_id) : null;
+
+      return {
+        match_id: m.id,
+        lost_item_id: m.lost_item_id,
+        found_item_id: m.found_item_id,
+        origin_item_id: myItemId,
+        match_score: m.match_score,
+        match_reasons: m.match_reasons,
+        matched_features: m.matched_features,
+        ai_evaluated: m.ai_evaluated,
+        match_status: m.status,
+        created_at: m.created_at,
+        ...(otherItem || {}),
+        reporter_name: reporter?.full_name || 'Campus Member',
+        reporter_campus: reporter?.college || 'Central Campus'
+      };
+    }).sort((a, b) => b.match_score - a.match_score);
+  }
+
+  // Get a single match details with both items hydrated and strict user access validation
+  async getPotentialMatchById(matchId: string, requestingUserId?: string): Promise<{
+    match: PotentialMatchRecord;
+    lostItem: ItemRecord;
+    foundItem: ItemRecord;
+    isOwner: boolean;
+  } | null> {
+    let matchRecord: PotentialMatchRecord | null = null;
+
+    if (this.isPostgrestReady) {
+      try {
+        const { data, error } = await supabaseAdmin
+          .from('potential_matches')
+          .select('*')
+          .eq('id', matchId)
+          .maybeSingle();
+        if (!error && data) {
+          matchRecord = data as PotentialMatchRecord;
+        }
+      } catch (err) {
+        console.warn('[Supabase DB] Error in getPotentialMatchById:', err);
+      }
+    }
+
+    if (!matchRecord) {
+      matchRecord = this.memoryMatches.get(matchId) || null;
+    }
+
+    if (!matchRecord) return null;
+
+    const lostItem = await this.getItemById(matchRecord.lost_item_id);
+    const foundItem = await this.getItemById(matchRecord.found_item_id);
+
+    if (!lostItem || !foundItem) return null;
+
+    const isOwner = requestingUserId
+      ? (lostItem.user_id === requestingUserId || foundItem.user_id === requestingUserId)
+      : false;
+
+    // Security check: If authenticated user requested it, they must own one of the items
+    if (requestingUserId && !isOwner) {
+      return null;
+    }
+
+    return {
+      match: matchRecord,
+      lostItem,
+      foundItem,
+      isOwner
+    };
+  }
+
+  // Check if a match notification was already sent to avoid duplicates
+  async hasExistingNotificationForMatch(userId: string, relatedItemId: string): Promise<boolean> {
+    if (this.isPostgrestReady) {
+      try {
+        const { data, error } = await supabaseAdmin
+          .from('notifications')
+          .select('id')
+          .eq('user_id', userId)
+          .eq('type', 'AI_MATCH')
+          .eq('related_item_id', relatedItemId)
+          .limit(1);
+        if (!error && data && data.length > 0) return true;
+      } catch {
+        // fallback
+      }
+    }
+
+    return Array.from(this.memoryNotifications.values()).some(
+      n => n.user_id === userId && n.type === 'AI_MATCH' && n.related_item_id === relatedItemId
+    );
   }
 
   // AI Matcher raw query helper

@@ -6,6 +6,7 @@ import crypto from 'crypto';
 import { supabaseDb, ItemRecord } from '../db/supabaseDb.js';
 import { AuthenticatedRequest, authenticateToken, optionalAuthenticateToken } from '../middleware/auth.js';
 import { aiMatchingService } from '../services/aiMatcher.js';
+import { matchAlertService } from '../services/matchAlertService.js';
 import { supabaseAdmin, isSupabaseServerConfigured } from '../services/supabase.js';
 import { aiLimiter, itemCreationLimiter } from '../middleware/rateLimiters.js';
 import { validateItem, validateAISearch, sanitizeString } from '../middleware/validation.js';
@@ -115,6 +116,41 @@ export function createItemsRouter(): Router {
     } catch (err: any) {
       console.error('Fetch my-items error:', err);
       return res.status(500).json({ error: 'Failed to retrieve your reported items.' });
+    }
+  });
+
+  // Authenticated user's potential matches across all their items (Strict User Isolation)
+  router.get('/my-matches', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const matches = await supabaseDb.getPotentialMatchesForUser(req.user!.id);
+      return res.json({
+        total: matches.length,
+        matches
+      });
+    } catch (err: any) {
+      console.error('Fetch my-matches error:', err);
+      return res.status(500).json({ error: 'Failed to retrieve your potential matches.' });
+    }
+  });
+
+  // Get single match details with both items hydrated (Strict Security Scope)
+  router.get('/matches/:matchId', optionalAuthenticateToken, async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const { matchId } = req.params;
+      const matchData = await supabaseDb.getPotentialMatchById(matchId, req.user?.id);
+      if (!matchData) {
+        return res.status(404).json({ error: 'Potential match not found or access denied.' });
+      }
+
+      return res.json({
+        match: matchData.match,
+        lostItem: matchData.lostItem,
+        foundItem: matchData.foundItem,
+        isOwner: matchData.isOwner
+      });
+    } catch (err: any) {
+      console.error('Fetch match details error:', err);
+      return res.status(500).json({ error: 'Failed to retrieve potential match details.' });
     }
   });
 
@@ -373,20 +409,20 @@ export function createItemsRouter(): Router {
         ai_image_analysis: imageAnalysis
       });
 
-      // Run AI potential matching pipeline
-      let matchesCount = 0;
-      try {
-        matchesCount = await aiMatchingService.findMatchesForItem(createdItem);
-      } catch (matchErr) {
-        console.warn('Matching pipeline error:', matchErr);
-      }
-
-      const finalItem = await supabaseDb.getItemById(itemId);
+      // Non-blocking Asynchronous AI Matching (Rule 27: Async Processing)
+      // Do NOT make report creation wait for multiple Gemini calls. Return 201 immediately.
+      setImmediate(async () => {
+        try {
+          await matchAlertService.processNewReport(createdItem);
+        } catch (matchErr) {
+          console.warn('[AI MATCH] Background matching error:', matchErr);
+        }
+      });
 
       return res.status(201).json({
         message: `${type === 'LOST' ? 'Lost' : 'Found'} item reported successfully.`,
-        item: finalItem || createdItem,
-        matchesFound: matchesCount,
+        item: createdItem,
+        matchesFound: 0,
         consistency: consistencyResult,
         warning: consistencyResult.has_mismatch ? consistencyResult.warning_message : undefined
       });

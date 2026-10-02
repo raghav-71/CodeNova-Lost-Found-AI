@@ -442,7 +442,10 @@ const BRAND_PATTERNS = [
   { name: 'Tupperware', regex: /\b(tupperware)\b/i },
   { name: 'Hydro Flask', regex: /\b(hydro\s*flask)\b/i },
   { name: 'The North Face', regex: /\b(the\s*north\s*face|north\s*face)\b/i },
-  { name: 'Fossil', regex: /\b(fossil)\b/i }
+  { name: 'Fossil', regex: /\b(fossil)\b/i },
+  { name: 'Tommy Hilfiger', regex: /\b(tommy\s*hilfiger|tommy)\b/i },
+  { name: 'Calvin Klein', regex: /\b(calvin\s*klein|ck)\b/i },
+  { name: 'Levi\'s', regex: /\b(levi'?s)\b/i }
 ];
 
 const COLOR_KEYWORDS = [

@@ -7,6 +7,7 @@ import { Item, PotentialMatch, Claim } from '../types/index.js';
 import { StatusBadge, TypeBadge } from '../components/StatusBadge.js';
 import { StatusTimeline } from '../components/StatusTimeline.js';
 import { AIMatchCard } from '../components/AIMatchCard.js';
+import { MatchDetailsModal } from '../components/MatchDetailsModal.js';
 import { ClaimModal } from '../components/ClaimModal.js';
 import { ContactModal } from '../components/ContactModal.js';
 import { MultimodalAnalysisBadge } from '../components/MultimodalAnalysisBadge.js';
@@ -48,6 +49,7 @@ export function ItemDetailsPage() {
   // Claim Modal
   const [isClaimModalOpen, setIsClaimModalOpen] = useState(false);
   const [claimTargetItem, setClaimTargetItem] = useState<Item | PotentialMatch | null>(null);
+  const [selectedMatchForModal, setSelectedMatchForModal] = useState<PotentialMatch | null>(null);
 
   // Contact Modal
   const [contactModalOpen, setContactModalOpen] = useState(false);
@@ -679,6 +681,9 @@ export function ItemDetailsPage() {
                       setClaimTargetItem(claimItem);
                       setIsClaimModalOpen(true);
                     }}
+                    onViewDetails={(matchItem) => {
+                      setSelectedMatchForModal(matchItem);
+                    }}
                   />
                 ))}
               </div>
@@ -686,6 +691,21 @@ export function ItemDetailsPage() {
           )}
         </div>
       </div>
+
+      {/* Match Details Modal */}
+      {selectedMatchForModal && (
+        <MatchDetailsModal
+          isOpen={true}
+          match={selectedMatchForModal}
+          originItem={item}
+          onClose={() => setSelectedMatchForModal(null)}
+          onClaimClick={(claimItem) => {
+            setSelectedMatchForModal(null);
+            setClaimTargetItem(claimItem);
+            setIsClaimModalOpen(true);
+          }}
+        />
+      )}
 
       {/* Claim Modal */}
       {claimTargetItem && (
