@@ -268,8 +268,12 @@ async function runTwoUserIsolationTestSuite() {
       })
     });
     const selfClaimJson: any = await selfClaimRes.json();
-    if (selfClaimRes.status === 400 && selfClaimJson.error === 'You cannot claim your own reported item.') {
-      console.log('   ✓ PASSED: Self-claim blocked with exact error:', selfClaimJson.error);
+    const isSelfClaimBlocked = selfClaimRes.status === 400 && (
+      selfClaimJson.error === 'You cannot claim an item you reported as found.' ||
+      selfClaimJson.error === 'You cannot claim your own reported item.'
+    );
+    if (isSelfClaimBlocked) {
+      console.log('   ✓ PASSED: Self-claim blocked with error:', selfClaimJson.error);
     } else {
       throw new Error(`Self-claim check failed! Status: ${selfClaimRes.status}, Body: ${JSON.stringify(selfClaimJson)}`);
     }
@@ -346,7 +350,7 @@ async function runTwoUserIsolationTestSuite() {
     // ------------------------------------------------------------------------
     // STEP 12: User A Approves User B Claim & Resolves Item
     // ------------------------------------------------------------------------
-    console.log('\nStep 12: User A approves User B claim & resolves item...');
+    console.log('\nStep 12: User A approves User B claim & User B confirms receipt...');
     const approveRes: any = await fetch(`${BASE_URL}/claims/${claimId}/status`, {
       method: 'PUT',
       headers: {
@@ -359,6 +363,15 @@ async function runTwoUserIsolationTestSuite() {
       })
     }).then(r => r.json());
     console.log('   ✓ Claim approved:', approveRes.message, 'Status:', approveRes.status);
+
+    // Claimant confirms receipt ("I Received My Item")
+    const resolveRes: any = await fetch(`${BASE_URL}/claims/${claimId}/resolve`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${tokenB}`
+      }
+    }).then(r => r.json());
+    console.log('   ✓ Claimant confirmed receipt:', resolveRes.message, 'Status:', resolveRes.status);
 
     // Verify item is now RESOLVED
     const resolvedItem: any = await fetch(`${BASE_URL}/items/${foundItemAId}`).then(r => r.json());

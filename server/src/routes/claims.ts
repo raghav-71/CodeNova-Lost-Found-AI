@@ -3,33 +3,29 @@ import crypto from 'crypto';
 import { supabaseDb } from '../db/supabaseDb.js';
 import { AuthenticatedRequest, authenticateToken } from '../middleware/auth.js';
 import { claimLimiter } from '../middleware/rateLimiters.js';
-import { validateClaim, sanitizeString } from '../middleware/validation.js';
+import { validateClaim } from '../middleware/validation.js';
 
 export function createClaimsRouter(): Router {
   const router = Router();
 
-  // Submit a claim on an item
+  /**
+   * POST /api/claims
+   * Simplified Claim Submission — only itemId required
+   */
   router.post('/', claimLimiter, authenticateToken, validateClaim, async (req: AuthenticatedRequest, res: Response) => {
     try {
       const {
         itemId,
+        message,
         locationLost,
         dateLost,
         identifyingDetails,
         proofNotes,
-        contactShareConsent
+        contactShareConsent = true
       } = req.body;
 
-      if (!itemId || !locationLost || !dateLost || !identifyingDetails) {
-        return res.status(400).json({
-          error: 'Item ID, location lost, date lost, and identifying characteristics are required.'
-        });
-      }
-
-      if (String(identifyingDetails).trim().length < 10) {
-        return res.status(400).json({
-          error: 'Please provide detailed identifying characteristics (at least 10 characters).'
-        });
+      if (!itemId) {
+        return res.status(400).json({ error: 'Item ID is required.' });
       }
 
       const item = await supabaseDb.getItemById(itemId);
@@ -37,28 +33,28 @@ export function createClaimsRouter(): Router {
         return res.status(404).json({ error: 'Item not found.' });
       }
 
-      // Business Rule 1: Claims can only be submitted for FOUND items
+      // Rule 1: Claims can only be submitted for FOUND items
       if (item.type !== 'FOUND') {
         return res.status(400).json({
           error: 'Claims can only be submitted for items reported as FOUND.'
         });
       }
 
-      // Business Rule 2: Cannot claim an already resolved or closed item
+      // Rule 2: Cannot claim an already resolved or closed item
       if (item.status === 'RESOLVED' || item.status === 'CLOSED') {
         return res.status(400).json({
           error: 'This item has already been resolved or returned.'
         });
       }
 
-      // Business Rule 3: User cannot claim their own reported item (Exact error match)
+      // Rule 3: Self-claim check (User cannot claim their own reported found item)
       if (item.user_id === req.user!.id) {
         return res.status(400).json({
-          error: 'You cannot claim your own reported item.'
+          error: 'You cannot claim an item you reported as found.'
         });
       }
 
-      // Business Rule 4: Prevent duplicate active (PENDING or APPROVED) claims
+      // Rule 4: Prevent duplicate active (PENDING or APPROVED) claims
       const existingClaim = await supabaseDb.getActiveClaim(itemId, req.user!.id);
       if (existingClaim) {
         return res.status(409).json({
@@ -80,30 +76,31 @@ export function createClaimsRouter(): Router {
       }
 
       const claimId = crypto.randomUUID();
-      await supabaseDb.createClaim({
+      const newClaim = await supabaseDb.createClaim({
         id: claimId,
         item_id: itemId,
         claimant_id: req.user!.id,
         status: 'PENDING',
-        location_lost: locationLost.trim(),
-        date_lost: dateLost.trim(),
-        identifying_details: identifyingDetails.trim(),
+        message: message?.trim() || undefined,
+        location_lost: locationLost?.trim() || item.location,
+        date_lost: dateLost?.trim() || item.date,
+        identifying_details: identifyingDetails?.trim() || (message?.trim() ? `Note: ${message.trim()}` : 'Direct claim from matching lost report.'),
         proof_notes: proofNotes?.trim() || undefined,
         contact_share_consent: Boolean(contactShareConsent)
       });
 
-      // Update item status to CLAIM_PENDING if currently ACTIVE or MATCH_FOUND
+      // Update item status to CLAIM_PENDING
       if (item.status === 'ACTIVE' || item.status === 'MATCH_FOUND') {
         await supabaseDb.updateItem(itemId, item.user_id, { status: 'CLAIM_PENDING' });
       }
 
-      // Create notification for item reporter / finder
+      // Notify the finder that someone claimed their found item
       await supabaseDb.createNotification({
         id: crypto.randomUUID(),
         user_id: item.user_id,
         type: 'CLAIM_RECEIVED',
-        title: 'New Claim Submitted',
-        message: `${req.user!.name} submitted an ownership claim for "${item.title}". Review their verification answers.`,
+        title: 'Someone claimed an item you reported',
+        message: `${req.user!.name} submitted a claim for "${item.title}".`,
         link_url: `/claims`,
         related_item_id: itemId,
         related_claim_id: claimId,
@@ -111,8 +108,9 @@ export function createClaimsRouter(): Router {
       });
 
       return res.status(201).json({
-        message: 'Claim submitted successfully. The reporter will review your verification details.',
-        claimId
+        message: 'Claim submitted successfully. The finder has been notified.',
+        claimId,
+        claim: newClaim
       });
     } catch (err: any) {
       console.error('Submit claim error:', err);
@@ -120,7 +118,10 @@ export function createClaimsRouter(): Router {
     }
   });
 
-  // Get claims submitted by the current user
+  /**
+   * GET /api/claims/my-claims
+   * Get claims submitted by the current user
+   */
   router.get('/my-claims', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
     try {
       const claims = await supabaseDb.getClaimsSubmittedByUser(req.user!.id);
@@ -131,7 +132,20 @@ export function createClaimsRouter(): Router {
     }
   });
 
-  // Get claims received on items reported by the current user
+  router.get('/my', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const claims = await supabaseDb.getClaimsSubmittedByUser(req.user!.id);
+      return res.json({ claims });
+    } catch (err: any) {
+      console.error('Fetch my claims error:', err);
+      return res.status(500).json({ error: 'Failed to retrieve claims.' });
+    }
+  });
+
+  /**
+   * GET /api/claims/received
+   * Get claims received on items reported as found by the current user
+   */
   router.get('/received', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
     try {
       const claims = await supabaseDb.getClaimsReceivedByUser(req.user!.id);
@@ -142,14 +156,17 @@ export function createClaimsRouter(): Router {
     }
   });
 
-  // Approve or reject a claim
+  /**
+   * PUT /api/claims/:id/status
+   * Update claim status: APPROVED, REJECTED, or RESOLVED
+   */
   router.put('/:id/status', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
     try {
       const { id } = req.params;
       const { status, resolutionNotes } = req.body;
 
-      if (!['APPROVED', 'REJECTED'].includes(status)) {
-        return res.status(400).json({ error: 'Status must be either APPROVED or REJECTED.' });
+      if (!['APPROVED', 'REJECTED', 'RESOLVED'].includes(status)) {
+        return res.status(400).json({ error: 'Status must be APPROVED, REJECTED, or RESOLVED.' });
       }
 
       const claim = await supabaseDb.getClaimById(id);
@@ -157,47 +174,56 @@ export function createClaimsRouter(): Router {
         return res.status(404).json({ error: 'Claim not found.' });
       }
 
-      // Check authorization: only item owner / finder can approve/reject
-      if (claim.item_owner_id !== req.user!.id && req.user!.role !== 'admin') {
-        return res.status(403).json({ error: 'You are not authorized to manage this claim.' });
+      const isFinder = claim.item_owner_id === req.user!.id || req.user!.role === 'admin';
+      const isClaimant = claim.claimant_id === req.user!.id;
+
+      // Approval / Rejection can only be performed by the finder
+      if ((status === 'APPROVED' || status === 'REJECTED') && !isFinder) {
+        return res.status(403).json({ error: 'You are not authorized to approve or reject this claim.' });
+      }
+
+      // Resolution can be confirmed by either claimant or finder
+      if (status === 'RESOLVED' && !isFinder && !isClaimant) {
+        return res.status(403).json({ error: 'You are not authorized to mark this item as resolved.' });
       }
 
       await supabaseDb.updateClaimStatus(id, status, resolutionNotes?.trim());
 
       if (status === 'APPROVED') {
-        // Notify claimant of approval
+        // Notify claimant: "Your claim was approved. Contact the finder to collect your item."
         await supabaseDb.createNotification({
           id: crypto.randomUUID(),
           user_id: claim.claimant_id,
           type: 'CLAIM_APPROVED',
           title: 'Claim Approved! 🎉',
-          message: `Your ownership claim for "${claim.item_title}" has been verified and approved by the reporter. You can now coordinate recovery!`,
-          link_url: `/items/${claim.item_id}`,
+          message: 'Your claim was approved. Contact the finder to collect your item.',
+          link_url: `/claims`,
           related_item_id: claim.item_id,
           related_claim_id: claim.id,
           is_read: false
         });
-
-        // Also notify the finder of successful resolution
-        await supabaseDb.createNotification({
-          id: crypto.randomUUID(),
-          user_id: claim.item_owner_id!,
-          type: 'CLAIM_APPROVED',
-          title: 'Item Claim Resolved! 🎉',
-          message: `You approved the claim for "${claim.item_title}". The item is now marked as RESOLVED.`,
-          link_url: `/items/${claim.item_id}`,
-          related_item_id: claim.item_id,
-          related_claim_id: claim.id,
-          is_read: false
-        });
-      } else {
-        // Notify claimant of rejection
+      } else if (status === 'REJECTED') {
+        // Notify claimant: "Your claim was rejected."
         await supabaseDb.createNotification({
           id: crypto.randomUUID(),
           user_id: claim.claimant_id,
           type: 'CLAIM_REJECTED',
           title: 'Claim Update',
-          message: `Your claim for "${claim.item_title}" was not approved by the reporter.`,
+          message: 'Your claim was rejected.',
+          link_url: `/claims`,
+          related_item_id: claim.item_id,
+          related_claim_id: claim.id,
+          is_read: false
+        });
+      } else if (status === 'RESOLVED') {
+        // Notify both parties: "Item marked as returned."
+        const otherUserId = isClaimant ? claim.item_owner_id! : claim.claimant_id;
+        await supabaseDb.createNotification({
+          id: crypto.randomUUID(),
+          user_id: otherUserId,
+          type: 'CLAIM_APPROVED',
+          title: 'Item Returned! 🎉',
+          message: 'Item marked as returned.',
           link_url: `/items/${claim.item_id}`,
           related_item_id: claim.item_id,
           related_claim_id: claim.id,
@@ -205,13 +231,101 @@ export function createClaimsRouter(): Router {
         });
       }
 
+      const updatedClaim = await supabaseDb.getClaimById(id);
       return res.json({
         message: `Claim ${status.toLowerCase()} successfully.`,
-        status
+        status,
+        claim: updatedClaim
       });
     } catch (err: any) {
       console.error('Update claim status error:', err);
       return res.status(500).json({ error: 'Failed to update claim status.' });
+    }
+  });
+
+  /**
+   * POST /api/claims/:id/resolve
+   * "I Received My Item" / Handover Confirmed endpoint
+   */
+  router.post('/:id/resolve', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const { id } = req.params;
+      const { resolutionNotes } = req.body;
+
+      const claim = await supabaseDb.getClaimById(id);
+      if (!claim) {
+        return res.status(404).json({ error: 'Claim not found.' });
+      }
+
+      const isFinder = claim.item_owner_id === req.user!.id || req.user!.role === 'admin';
+      const isClaimant = claim.claimant_id === req.user!.id;
+
+      if (!isFinder && !isClaimant) {
+        return res.status(403).json({ error: 'You are not authorized to resolve this claim.' });
+      }
+
+      if (claim.status !== 'APPROVED') {
+        return res.status(400).json({ error: 'Only approved claims can be marked as received/resolved.' });
+      }
+
+      await supabaseDb.updateClaimStatus(id, 'RESOLVED', resolutionNotes?.trim() || 'Item successfully received by owner.');
+
+      const otherUserId = isClaimant ? claim.item_owner_id! : claim.claimant_id;
+      await supabaseDb.createNotification({
+        id: crypto.randomUUID(),
+        user_id: otherUserId,
+        type: 'CLAIM_APPROVED',
+        title: 'Item Returned! 🎉',
+        message: 'Item marked as returned.',
+        link_url: `/items/${claim.item_id}`,
+        related_item_id: claim.item_id,
+        related_claim_id: claim.id,
+        is_read: false
+      });
+
+      const updatedClaim = await supabaseDb.getClaimById(id);
+      return res.json({
+        message: 'Item successfully returned.',
+        status: 'RESOLVED',
+        claim: updatedClaim
+      });
+    } catch (err: any) {
+      console.error('Resolve claim error:', err);
+      return res.status(500).json({ error: 'Failed to resolve claim.' });
+    }
+  });
+
+  /**
+   * POST /api/claims/:id/cancel
+   * Claimant cancels their pending claim
+   */
+  router.post('/:id/cancel', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const { id } = req.params;
+      const claim = await supabaseDb.getClaimById(id);
+      if (!claim) {
+        return res.status(404).json({ error: 'Claim not found.' });
+      }
+
+      if (claim.claimant_id !== req.user!.id && req.user!.role !== 'admin') {
+        return res.status(403).json({ error: 'You are not authorized to cancel this claim.' });
+      }
+
+      if (claim.status === 'RESOLVED') {
+        return res.status(400).json({ error: 'Resolved claims cannot be cancelled.' });
+      }
+
+      await supabaseDb.updateClaimStatus(id, 'CANCELLED', 'Cancelled by claimant.');
+
+      const updatedClaim = await supabaseDb.getClaimById(id);
+      return res.json({
+        message: 'Claim cancelled successfully.',
+        status: 'CANCELLED',
+        claim: updatedClaim
+      });
+    } catch (err: any) {
+      console.error('Cancel claim error:', err);
+      return res.status(500).json({ error: 'Failed to cancel claim.' });
     }
   });
 

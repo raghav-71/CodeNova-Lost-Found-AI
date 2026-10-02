@@ -146,12 +146,13 @@ export interface Claim {
   id: string;
   item_id: string;
   claimant_id: string;
-  status: 'PENDING' | 'APPROVED' | 'REJECTED';
-  location_lost: string;
-  date_lost: string;
-  identifying_details: string;
+  status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'RESOLVED' | 'CANCELLED';
+  location_lost?: string;
+  date_lost?: string;
+  identifying_details?: string;
   proof_notes?: string;
-  contact_share_consent: number | boolean;
+  message?: string;
+  contact_share_consent?: number | boolean;
   resolution_notes?: string;
   created_at: string;
   updated_at?: string;
@@ -162,12 +163,16 @@ export interface Claim {
   item_date?: string;
   item_status?: ItemStatus;
   item_image?: string;
+  item_owner_id?: string;
   reporter_name?: string;
+  reporter_email?: string;
   reporter_campus?: string;
+  reporter_phone?: string;
   claimant_name?: string;
   claimant_email?: string;
   claimant_campus?: string;
   claimant_avatar?: string;
+  claimant_phone?: string;
 }
 
 export interface NotificationItem {

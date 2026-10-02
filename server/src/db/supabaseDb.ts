@@ -56,13 +56,14 @@ export interface ClaimRecord {
   id: string;
   item_id: string;
   claimant_id: string;
-  location_lost: string;
-  date_lost: string;
-  identifying_details: string;
+  location_lost?: string;
+  date_lost?: string;
+  identifying_details?: string;
   proof_notes?: string;
-  contact_share_consent: boolean | number;
+  message?: string;
+  contact_share_consent?: boolean | number;
   resolution_notes?: string;
-  status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELLED';
+  status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'RESOLVED' | 'CANCELLED';
   created_at?: string;
   updated_at?: string;
   item_title?: string;
@@ -72,11 +73,14 @@ export interface ClaimRecord {
   item_image?: string;
   item_owner_id?: string;
   reporter_name?: string;
+  reporter_email?: string;
   reporter_campus?: string;
+  reporter_phone?: string;
   claimant_name?: string;
   claimant_email?: string;
   claimant_campus?: string;
   claimant_avatar?: string;
+  claimant_phone?: string;
 }
 
 export interface NotificationRecord {
@@ -668,11 +672,11 @@ class SupabaseDatabaseService {
             id: created.id,
             item_id: created.item_id,
             claimant_id: created.claimant_id,
-            location_lost: created.location_lost,
-            date_lost: created.date_lost,
-            identifying_details: created.identifying_details,
-            proof_notes: created.proof_notes || null,
-            contact_share_consent: Boolean(created.contact_share_consent),
+            location_lost: created.location_lost || 'Campus',
+            date_lost: created.date_lost || new Date().toISOString().split('T')[0],
+            identifying_details: created.identifying_details || created.message || 'Direct claim from matching lost report.',
+            proof_notes: created.proof_notes || created.message || null,
+            contact_share_consent: Boolean(created.contact_share_consent ?? true),
             status: created.status
           })
           .select()
@@ -692,7 +696,7 @@ class SupabaseDatabaseService {
       try {
         const { data, error } = await supabaseAdmin
           .from('claims')
-          .select('*, items:item_id(title, type, category, location, primary_image, user_id, profiles:user_id(full_name, college))')
+          .select('*, items:item_id(title, type, category, location, primary_image, user_id, profiles:user_id(full_name, college, email, phone))')
           .eq('claimant_id', claimantId)
           .order('created_at', { ascending: false });
         if (!error && data) {
@@ -704,8 +708,14 @@ class SupabaseDatabaseService {
             item_location: c.items?.location,
             item_image: c.items?.primary_image,
             item_owner_id: c.items?.user_id,
+            finder_name: c.items?.profiles?.full_name || 'Campus Finder',
+            finder_campus: c.items?.profiles?.college || 'Central Campus',
+            finder_email: (c.status === 'APPROVED' || c.status === 'RESOLVED') ? c.items?.profiles?.email : undefined,
+            finder_phone: (c.status === 'APPROVED' || c.status === 'RESOLVED') ? c.items?.profiles?.phone : undefined,
             reporter_name: c.items?.profiles?.full_name || 'Campus Finder',
-            reporter_campus: c.items?.profiles?.college || 'Central Campus'
+            reporter_campus: c.items?.profiles?.college || 'Central Campus',
+            reporter_email: (c.status === 'APPROVED' || c.status === 'RESOLVED') ? c.items?.profiles?.email : undefined,
+            reporter_phone: (c.status === 'APPROVED' || c.status === 'RESOLVED') ? c.items?.profiles?.phone : undefined
           }));
         }
       } catch {
@@ -728,8 +738,14 @@ class SupabaseDatabaseService {
         item_location: item?.location,
         item_image: item?.primary_image,
         item_owner_id: item?.user_id,
+        finder_name: reporter?.full_name || 'Campus Finder',
+        finder_campus: reporter?.college || 'Central Campus',
+        finder_email: (c.status === 'APPROVED' || c.status === 'RESOLVED') ? reporter?.email : undefined,
+        finder_phone: (c.status === 'APPROVED' || c.status === 'RESOLVED') ? reporter?.phone : undefined,
         reporter_name: reporter?.full_name || 'Campus Finder',
-        reporter_campus: reporter?.college || 'Central Campus'
+        reporter_campus: reporter?.college || 'Central Campus',
+        reporter_email: (c.status === 'APPROVED' || c.status === 'RESOLVED') ? reporter?.email : undefined,
+        reporter_phone: (c.status === 'APPROVED' || c.status === 'RESOLVED') ? reporter?.phone : undefined
       };
     });
   }
@@ -747,7 +763,7 @@ class SupabaseDatabaseService {
           const itemIds = userItems.map(i => i.id);
           const { data: claimsData } = await supabaseAdmin
             .from('claims')
-            .select('*, claimant:claimant_id(full_name, email, college, avatar_url)')
+            .select('*, claimant:claimant_id(full_name, email, phone, college, avatar_url)')
             .in('item_id', itemIds)
             .order('created_at', { ascending: false });
 
@@ -763,7 +779,8 @@ class SupabaseDatabaseService {
                 item_image: item?.primary_image,
                 item_owner_id: item?.user_id,
                 claimant_name: c.claimant?.full_name || 'Campus Claimant',
-                claimant_email: c.claimant?.email,
+                claimant_email: (c.status === 'APPROVED' || c.status === 'RESOLVED') ? c.claimant?.email : undefined,
+                claimant_phone: (c.status === 'APPROVED' || c.status === 'RESOLVED') ? c.claimant?.phone : undefined,
                 claimant_campus: c.claimant?.college || 'Central Campus',
                 claimant_avatar: c.claimant?.avatar_url
               };
@@ -799,7 +816,8 @@ class SupabaseDatabaseService {
         item_image: item?.primary_image,
         item_owner_id: item?.user_id,
         claimant_name: claimant?.full_name || 'Campus Claimant',
-        claimant_email: claimant?.email,
+        claimant_email: (c.status === 'APPROVED' || c.status === 'RESOLVED') ? claimant?.email : undefined,
+        claimant_phone: (c.status === 'APPROVED' || c.status === 'RESOLVED') ? claimant?.phone : undefined,
         claimant_campus: claimant?.college || 'Central Campus',
         claimant_avatar: claimant?.avatar_url
       };
@@ -808,7 +826,7 @@ class SupabaseDatabaseService {
 
   async updateClaimStatus(
     claimId: string,
-    status: 'APPROVED' | 'REJECTED',
+    status: 'APPROVED' | 'REJECTED' | 'RESOLVED' | 'CANCELLED',
     resolutionNotes?: string
   ): Promise<ClaimRecord | null> {
     if (this.isPostgrestReady) {
@@ -825,25 +843,28 @@ class SupabaseDatabaseService {
           .single();
 
         if (claimData) {
-          if (status === 'APPROVED') {
+          if (status === 'RESOLVED') {
             await supabaseAdmin.from('items').update({ status: 'RESOLVED', updated_at: new Date().toISOString() }).eq('id', claimData.item_id);
             await supabaseAdmin
               .from('claims')
               .update({
                 status: 'REJECTED',
-                resolution_notes: 'Item resolved with another verified claimant.',
+                resolution_notes: 'Item resolved with verified claimant.',
                 updated_at: new Date().toISOString()
               })
               .eq('item_id', claimData.item_id)
               .neq('id', claimId)
-              .eq('status', 'PENDING');
+              .in('status', ['PENDING', 'APPROVED']);
+          } else if (status === 'APPROVED') {
+            // Keep item in CLAIM_PENDING during physical handover
+            await supabaseAdmin.from('items').update({ status: 'CLAIM_PENDING', updated_at: new Date().toISOString() }).eq('id', claimData.item_id);
           } else {
             const { data: pendingClaims } = await supabaseAdmin
               .from('claims')
               .select('id')
               .eq('item_id', claimData.item_id)
               .neq('id', claimId)
-              .eq('status', 'PENDING');
+              .in('status', ['PENDING', 'APPROVED']);
             if (!pendingClaims || pendingClaims.length === 0) {
               await supabaseAdmin.from('items').update({ status: 'ACTIVE', updated_at: new Date().toISOString() }).eq('id', claimData.item_id);
             }
@@ -867,8 +888,8 @@ class SupabaseDatabaseService {
 
     this.memoryClaims.set(claimId, updated);
 
-    // If approved, resolve item and reject competing claims
-    if (status === 'APPROVED') {
+    // If resolved, mark item as RESOLVED and reject competing claims
+    if (status === 'RESOLVED') {
       const item = this.memoryItems.get(claim.item_id);
       if (item) {
         this.memoryItems.set(item.id, {
@@ -878,22 +899,33 @@ class SupabaseDatabaseService {
         });
       }
 
-      // Reject competing pending claims
+      // Reject competing claims
       for (const [id, c] of this.memoryClaims.entries()) {
-        if (c.item_id === claim.item_id && id !== claimId && c.status === 'PENDING') {
+        if (c.item_id === claim.item_id && id !== claimId && ['PENDING', 'APPROVED'].includes(c.status)) {
           this.memoryClaims.set(id, {
             ...c,
             status: 'REJECTED',
-            resolution_notes: 'Item resolved with another verified claimant.',
+            resolution_notes: 'Item resolved with verified claimant.',
             updated_at: new Date().toISOString()
           });
         }
       }
+    } else if (status === 'APPROVED') {
+      // Keep item in CLAIM_PENDING so physical handover can be coordinated
+      const item = this.memoryItems.get(claim.item_id);
+      if (item && item.status !== 'RESOLVED') {
+        this.memoryItems.set(item.id, {
+          ...item,
+          status: 'CLAIM_PENDING',
+          updated_at: new Date().toISOString()
+        });
+      }
     } else {
+      // REJECTED or CANCELLED
       const item = this.memoryItems.get(claim.item_id);
       if (item && item.status === 'CLAIM_PENDING') {
         const remaining = Array.from(this.memoryClaims.values()).some(
-          c => c.item_id === item.id && c.id !== claimId && c.status === 'PENDING'
+          c => c.item_id === item.id && c.id !== claimId && ['PENDING', 'APPROVED'].includes(c.status)
         );
         this.memoryItems.set(item.id, {
           ...item,

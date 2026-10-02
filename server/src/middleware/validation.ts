@@ -164,33 +164,30 @@ export function validateItem(req: Request, res: Response, next: NextFunction) {
 }
 
 /**
- * Validate claim submission
+ * Validate claim submission (Simplified Flow - only itemId required)
  */
 export function validateClaim(req: Request, res: Response, next: NextFunction) {
-  const { itemId, locationLost, dateLost, identifyingDetails, proofNotes } = req.body;
+  const { itemId, locationLost, dateLost, identifyingDetails, proofNotes, message } = req.body;
 
   if (!itemId || typeof itemId !== 'string' || !UUID_REGEX.test(itemId.trim())) {
     return res.status(400).json({ error: 'A valid Item ID (UUID) is required.' });
   }
 
-  if (!locationLost || typeof locationLost !== 'string' || sanitizeString(locationLost, 200).length < 2) {
-    return res.status(400).json({ error: 'Please specify the location where you lost the item.' });
-  }
-
-  if (!dateLost || typeof dateLost !== 'string' || sanitizeString(dateLost, 50).length < 2) {
-    return res.status(400).json({ error: 'Please specify the date when you lost the item.' });
-  }
-
-  if (!identifyingDetails || typeof identifyingDetails !== 'string' || sanitizeString(identifyingDetails, 5000).length < 10) {
-    return res.status(400).json({ error: 'Please provide identifying characteristics (at least 10 characters).' });
-  }
-
   req.body.itemId = itemId.trim();
-  req.body.locationLost = sanitizeString(locationLost, 200);
-  req.body.dateLost = sanitizeString(dateLost, 50);
-  req.body.identifyingDetails = sanitizeString(identifyingDetails, 5000);
-  if (proofNotes !== undefined) {
+  if (locationLost !== undefined && typeof locationLost === 'string') {
+    req.body.locationLost = sanitizeString(locationLost, 200);
+  }
+  if (dateLost !== undefined && typeof dateLost === 'string') {
+    req.body.dateLost = sanitizeString(dateLost, 50);
+  }
+  if (identifyingDetails !== undefined && typeof identifyingDetails === 'string') {
+    req.body.identifyingDetails = sanitizeString(identifyingDetails, 5000);
+  }
+  if (proofNotes !== undefined && typeof proofNotes === 'string') {
     req.body.proofNotes = sanitizeString(proofNotes, 5000);
+  }
+  if (message !== undefined && typeof message === 'string') {
+    req.body.message = sanitizeString(message, 1000);
   }
 
   return next();

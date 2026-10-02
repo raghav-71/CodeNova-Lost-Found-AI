@@ -208,14 +208,15 @@ class ApiClient {
     });
   }
 
-  // Claims endpoints
+  // Claims endpoints (Simplified Recovery Flow)
   async submitClaim(claimData: {
     itemId: string;
-    locationLost: string;
-    dateLost: string;
-    identifyingDetails: string;
+    message?: string;
+    locationLost?: string;
+    dateLost?: string;
+    identifyingDetails?: string;
     proofNotes?: string;
-    contactShareConsent: boolean;
+    contactShareConsent?: boolean;
   }) {
     return this.request<{ message: string; claimId: string }>('/claims', {
       method: 'POST',
@@ -231,10 +232,27 @@ class ApiClient {
     return this.request<{ claims: any[] }>('/claims/received');
   }
 
-  async updateClaimStatus(claimId: string, status: 'APPROVED' | 'REJECTED', resolutionNotes?: string) {
+  async updateClaimStatus(
+    claimId: string,
+    status: 'APPROVED' | 'REJECTED' | 'RESOLVED' | 'CANCELLED',
+    resolutionNotes?: string
+  ) {
     return this.request<{ message: string; status: string }>(`/claims/${claimId}/status`, {
       method: 'PUT',
       body: JSON.stringify({ status, resolutionNotes })
+    });
+  }
+
+  async resolveClaim(claimId: string, resolutionNotes?: string) {
+    return this.request<{ message: string; status: string }>(`/claims/${claimId}/resolve`, {
+      method: 'POST',
+      body: JSON.stringify({ resolutionNotes })
+    });
+  }
+
+  async cancelClaim(claimId: string) {
+    return this.request<{ message: string; status: string }>(`/claims/${claimId}/cancel`, {
+      method: 'POST'
     });
   }
 

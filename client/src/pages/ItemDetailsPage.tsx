@@ -8,6 +8,7 @@ import { StatusBadge, TypeBadge } from '../components/StatusBadge.js';
 import { StatusTimeline } from '../components/StatusTimeline.js';
 import { AIMatchCard } from '../components/AIMatchCard.js';
 import { ClaimModal } from '../components/ClaimModal.js';
+import { ContactModal } from '../components/ContactModal.js';
 import { MultimodalAnalysisBadge } from '../components/MultimodalAnalysisBadge.js';
 import { DetailSkeleton } from '../components/SkeletonLoader.js';
 import confetti from 'canvas-confetti';
@@ -23,7 +24,11 @@ import {
   RefreshCw, 
   ArrowLeft, 
   Check, 
-  FileText
+  FileText,
+  Mail,
+  UserCheck,
+  XCircle,
+  HelpCircle
 } from 'lucide-react';
 
 export function ItemDetailsPage() {
@@ -43,6 +48,21 @@ export function ItemDetailsPage() {
   // Claim Modal
   const [isClaimModalOpen, setIsClaimModalOpen] = useState(false);
   const [claimTargetItem, setClaimTargetItem] = useState<Item | PotentialMatch | null>(null);
+
+  // Contact Modal
+  const [contactModalOpen, setContactModalOpen] = useState(false);
+  const [contactTarget, setContactTarget] = useState<{
+    title: string;
+    role: 'Finder' | 'Claimant';
+    contact: {
+      name?: string;
+      email?: string;
+      phone?: string;
+      campus?: string;
+      avatar?: string;
+    };
+    itemName?: string;
+  } | null>(null);
 
   const loadItemDetails = useCallback(async () => {
     if (!id) return;
@@ -96,15 +116,10 @@ export function ItemDetailsPage() {
     try {
       await api.updateClaimStatus(claimId, newStatus);
       if (newStatus === 'APPROVED') {
-        confetti({
-          particleCount: 120,
-          spread: 70,
-          origin: { y: 0.6 }
-        });
         showToast({
           type: 'success',
           title: 'Claim Approved! 🎉',
-          message: 'Item has been verified and marked as RESOLVED. Coordinates shared with claimant.'
+          message: 'Contact details unlocked. You can now coordinate handover with the claimant.'
         });
       } else {
         showToast({
@@ -119,6 +134,55 @@ export function ItemDetailsPage() {
         type: 'error',
         title: 'Action Failed',
         message: err.message || 'Failed to update claim.'
+      });
+    }
+  };
+
+  const handleResolveClaim = async (claimId: string) => {
+    const confirmResolve = window.confirm(
+      'Confirm that you have received / handed over this item? This will mark the item and claim as RESOLVED.'
+    );
+    if (!confirmResolve) return;
+
+    try {
+      await api.resolveClaim(claimId);
+      confetti({
+        particleCount: 140,
+        spread: 80,
+        origin: { y: 0.6 }
+      });
+      showToast({
+        type: 'success',
+        title: 'Item Returned! 🎉',
+        message: 'The item has been successfully resolved and returned.'
+      });
+      loadItemDetails();
+    } catch (err: any) {
+      showToast({
+        type: 'error',
+        title: 'Resolution Failed',
+        message: err.message || 'Could not mark item as resolved.'
+      });
+    }
+  };
+
+  const handleCancelClaim = async (claimId: string) => {
+    const confirmCancel = window.confirm('Are you sure you want to cancel this claim?');
+    if (!confirmCancel) return;
+
+    try {
+      await api.cancelClaim(claimId);
+      showToast({
+        type: 'info',
+        title: 'Claim Cancelled',
+        message: 'Your claim request has been withdrawn.'
+      });
+      loadItemDetails();
+    } catch (err: any) {
+      showToast({
+        type: 'error',
+        title: 'Failed to Cancel Claim',
+        message: err.message || 'Could not cancel claim.'
       });
     }
   };
@@ -162,8 +226,8 @@ export function ItemDetailsPage() {
           <ShieldCheck className="w-5 h-5 text-[#35B86B]" />
         </div>
         <div>
-          <h3 className="text-sm font-bold text-[#102018]">Item Verification & Claim</h3>
-          <p className="text-[11px] text-[#66756C] font-medium">Direct campus verification</p>
+          <h3 className="text-sm font-bold text-[#102018]">Claim & Recovery Status</h3>
+          <p className="text-[11px] text-[#66756C] font-medium">Campus item handover</p>
         </div>
       </div>
 
@@ -171,33 +235,95 @@ export function ItemDetailsPage() {
         <div className="p-4 rounded-2xl bg-[#EEF8F1] border border-[#D5ECD9] text-[#168A4A] text-xs space-y-1.5">
           <div className="flex items-center gap-1.5 font-bold">
             <CheckCircle2 className="w-4 h-4 text-[#35B86B]" />
-            <span>Item Successfully Recovered 🎉</span>
+            <span>Item Returned Successfully 🎉</span>
           </div>
           <p className="text-[11px] text-[#168A4A]/90 font-medium">
-            This report has been completed and ownership verified.
+            This item has been recovered and verified resolved.
           </p>
         </div>
-      ) : userClaim ? (
-        <div className="p-4 rounded-2xl bg-[#FEF3C7] border border-[#FDE68A] text-[#92400E] text-xs space-y-1.5">
-          <div className="flex items-center gap-1.5 font-bold">
-            <Clock className="w-4 h-4 text-[#D97706]" />
-            <span>Your Claim is {userClaim.status}</span>
+      ) : userClaim && userClaim.status === 'PENDING' ? (
+        <div className="space-y-3">
+          <div className="p-4 rounded-2xl bg-[#FEF3C7] border border-[#FDE68A] text-[#92400E] text-xs space-y-1.5">
+            <div className="flex items-center gap-1.5 font-bold">
+              <Clock className="w-4 h-4 text-[#D97706]" />
+              <span>Waiting for finder</span>
+            </div>
+            <p className="text-[11px] text-[#92400E]/90 font-medium">
+              Your claim request has been sent to the person who reported finding it.
+            </p>
           </div>
-          <p className="text-[11px] text-[#92400E]/90 font-medium">
-            The finder has received your questionnaire and will review shortly.
+          <button
+            onClick={() => handleCancelClaim(userClaim.id)}
+            className="w-full py-2.5 rounded-xl text-xs font-bold text-[#E11D48] bg-[#FFF1F2] hover:bg-[#FFE4E6] border border-[#FFE4E6] transition-colors"
+          >
+            Cancel Claim
+          </button>
+        </div>
+      ) : userClaim && userClaim.status === 'APPROVED' ? (
+        <div className="space-y-3">
+          <div className="p-4 rounded-2xl bg-[#EEF8F1] border border-[#D5ECD9] text-[#168A4A] text-xs space-y-1.5">
+            <div className="flex items-center gap-1.5 font-bold">
+              <CheckCircle2 className="w-4 h-4 text-[#35B86B]" />
+              <span>Claim Approved!</span>
+            </div>
+            <p className="text-[11px] text-[#168A4A]/90 font-medium">
+              Contact the finder to coordinate collection of your item.
+            </p>
+          </div>
+          <div className="flex flex-col gap-2">
+            <button
+              onClick={() => {
+                setContactTarget({
+                  title: 'Contact Finder',
+                  role: 'Finder',
+                  contact: {
+                    name: (userClaim as any).finder_name || item.reporter_name,
+                    campus: (userClaim as any).finder_campus || item.reporter_campus,
+                    email: (userClaim as any).finder_email || (item as any).reporter_email,
+                    phone: (userClaim as any).finder_phone || (item as any).reporter_phone,
+                    avatar: item.reporter_avatar
+                  },
+                  itemName: item.title
+                });
+                setContactModalOpen(true);
+              }}
+              className="w-full py-3 rounded-xl bg-white text-[#168A4A] border border-[#D5ECD9] hover:bg-[#EEF8F1] text-xs font-bold flex items-center justify-center gap-2 shadow-sm transition-colors"
+            >
+              <Mail className="w-4 h-4 text-[#35B86B]" />
+              <span>Contact Finder</span>
+            </button>
+            <button
+              onClick={() => handleResolveClaim(userClaim.id)}
+              className="btn-primary w-full py-3 text-xs font-bold flex items-center justify-center gap-2 shadow-md shadow-[#35B86B]/25"
+            >
+              <CheckCircle2 className="w-4 h-4" />
+              <span>I Received My Item</span>
+            </button>
+          </div>
+        </div>
+      ) : userClaim && userClaim.status === 'RESOLVED' ? (
+        <div className="p-4 rounded-2xl bg-[#EEF8F1] border border-[#D5ECD9] text-[#168A4A] text-xs space-y-1.5">
+          <div className="flex items-center gap-1.5 font-bold">
+            <CheckCircle2 className="w-4 h-4 text-[#35B86B]" />
+            <span>Item Returned Successfully 🎉</span>
+          </div>
+          <p className="text-[11px] text-[#168A4A]/90 font-medium">
+            You confirmed receiving this item. Thank you!
           </p>
         </div>
       ) : isOwner ? (
         <div className="p-4 rounded-2xl bg-[#EEF8F1] border border-[#D5ECD9] text-[#168A4A] text-xs space-y-2">
           <div className="font-bold text-[#168A4A]">You reported this item</div>
           <p className="text-[11px] text-[#2D3D34] leading-relaxed font-medium">
-            You will receive notifications whenever a student submits an ownership claim or an AI potential match is detected.
+            {claims.length > 0
+              ? `You have ${claims.length} claim request(s) waiting for your review below.`
+              : 'You will receive notifications whenever a student claims this item or an AI match is detected.'}
           </p>
         </div>
       ) : item.type === 'FOUND' ? (
         <div className="space-y-3">
           <p className="text-xs text-[#66756C] leading-relaxed font-medium">
-            Do you believe this found item belongs to you? Complete our verification questionnaire to initiate recovery.
+            Do you believe this found item belongs to you? Submit a claim to connect with the finder.
           </p>
           <button
             onClick={() => {
@@ -207,7 +333,7 @@ export function ItemDetailsPage() {
             className="btn-primary w-full py-3.5 text-xs sm:text-sm flex items-center justify-center gap-2 touch-target shadow-md shadow-[#35B86B]/25"
           >
             <ShieldCheck className="w-4 h-4" />
-            <span>Claim This Item</span>
+            <span>Claim Item</span>
           </button>
         </div>
       ) : (
@@ -336,7 +462,7 @@ export function ItemDetailsPage() {
               </div>
             </div>
 
-            {/* Mobile Action Box (Rendered right here on mobile screens so user doesn't miss the claim button) */}
+            {/* Mobile Action Box */}
             <div className="block lg:hidden pt-2">
               <ActionBox />
             </div>
@@ -361,8 +487,8 @@ export function ItemDetailsPage() {
               <div className="flex items-center gap-2">
                 <FileText className="w-5 h-5 text-[#D97706] shrink-0" />
                 <div>
-                  <h3 className="text-base sm:text-lg font-bold text-[#102018]">Ownership Claims Received ({claims.length})</h3>
-                  <p className="text-xs text-[#66756C] font-medium">Review verification responses provided by claimants</p>
+                  <h3 className="text-base sm:text-lg font-bold text-[#102018]">Claims Received ({claims.length})</h3>
+                  <p className="text-xs text-[#66756C] font-medium">Review and coordinate handover with claimants</p>
                 </div>
               </div>
 
@@ -377,7 +503,7 @@ export function ItemDetailsPage() {
                         <img
                           src={c.claimant_avatar || `https://api.dicebear.com/7.x/bottts/svg?seed=${c.claimant_name}`}
                           alt={c.claimant_name}
-                          className="w-9 h-9 rounded-xl object-cover bg-white border border-[#E3ECE6] shrink-0"
+                          className="w-10 h-10 rounded-xl object-cover bg-white border border-[#E3ECE6] shrink-0"
                         />
                         <div className="min-w-0">
                           <div className="font-bold text-sm text-[#102018] truncate">{c.claimant_name}</div>
@@ -388,50 +514,112 @@ export function ItemDetailsPage() {
                       <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold shrink-0 ${
                         c.status === 'APPROVED'
                           ? 'bg-[#EEF8F1] text-[#168A4A] border border-[#D5ECD9]'
+                          : c.status === 'RESOLVED'
+                          ? 'bg-[#EEF8F1] text-[#168A4A] border border-[#D5ECD9]'
                           : c.status === 'REJECTED'
                           ? 'bg-[#FFF1F2] text-[#E11D48] border border-[#FFE4E6]'
                           : 'bg-[#FEF3C7] text-[#92400E] border border-[#FDE68A]'
                       }`}>
-                        {c.status}
+                        {c.status === 'RESOLVED' ? 'RETURNED' : c.status}
                       </span>
                     </div>
 
-                    <div className="space-y-2 bg-white p-3.5 rounded-xl border border-[#E3ECE6]">
-                      <div>
-                        <span className="font-bold text-[#66756C]">Where Lost: </span>
-                        <span className="text-[#102018] font-medium break-words-anywhere">{c.location_lost}</span>
+                    {c.message ? (
+                      <div className="bg-white p-3 rounded-xl border border-[#E3ECE6] text-[#2D3D34]">
+                        <span className="font-bold text-[#66756C]">Note from claimant: </span>
+                        <span>{c.message}</span>
                       </div>
-                      <div>
-                        <span className="font-bold text-[#66756C]">Date Lost: </span>
-                        <span className="text-[#102018] font-medium">{c.date_lost}</span>
+                    ) : (
+                      <div className="text-[#66756C] italic text-[11px]">
+                        No additional note provided with claim request.
                       </div>
-                      <div>
-                        <span className="font-bold text-[#66756C]">Identifying Details: </span>
-                        <span className="text-[#102018] font-medium break-words-anywhere">{c.identifying_details}</span>
-                      </div>
-                      {c.proof_notes && (
-                        <div>
-                          <span className="font-bold text-[#66756C]">Proof Notes: </span>
-                          <span className="text-[#102018] font-medium break-words-anywhere">{c.proof_notes}</span>
-                        </div>
-                      )}
-                    </div>
+                    )}
 
+                    {/* Pending Actions */}
                     {c.status === 'PENDING' && (
-                      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-end gap-2 pt-2">
+                      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-end gap-2 pt-2 border-t border-[#E3ECE6]">
+                        <button
+                          onClick={() => {
+                            setContactTarget({
+                              title: 'Contact Claimant',
+                              role: 'Claimant',
+                              contact: {
+                                name: c.claimant_name,
+                                campus: c.claimant_campus,
+                                email: (c as any).claimant_email,
+                                phone: (c as any).claimant_phone,
+                                avatar: c.claimant_avatar
+                              },
+                              itemName: item.title
+                            });
+                            setContactModalOpen(true);
+                          }}
+                          className="px-3.5 py-2 rounded-xl bg-white hover:bg-[#EEF8F1] text-[#102018] border border-[#E3ECE6] font-bold text-xs flex items-center justify-center gap-1.5 touch-target"
+                        >
+                          <Mail className="w-3.5 h-3.5 text-[#35B86B]" />
+                          <span>Contact</span>
+                        </button>
                         <button
                           onClick={() => handleClaimStatusUpdate(c.id, 'REJECTED')}
-                          className="px-4 py-2.5 rounded-xl bg-[#FFF1F2] hover:bg-[#FFE4E6] text-[#E11D48] border border-[#FFE4E6] font-bold touch-target text-center"
+                          className="px-4 py-2 rounded-xl bg-[#FFF1F2] hover:bg-[#FFE4E6] text-[#E11D48] border border-[#FFE4E6] font-bold text-xs touch-target text-center"
                         >
-                          Reject Claim
+                          Reject
                         </button>
                         <button
                           onClick={() => handleClaimStatusUpdate(c.id, 'APPROVED')}
-                          className="btn-primary px-5 py-2.5 text-xs flex items-center justify-center gap-1.5 touch-target text-center"
+                          className="btn-primary px-5 py-2 text-xs flex items-center justify-center gap-1.5 touch-target text-center"
                         >
                           <Check className="w-3.5 h-3.5" />
-                          <span>Approve Claim & Resolve</span>
+                          <span>Approve Claim</span>
                         </button>
+                      </div>
+                    )}
+
+                    {/* Approved Actions: Ready for Handover */}
+                    {c.status === 'APPROVED' && (
+                      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 pt-2 border-t border-[#E3ECE6]">
+                        <span className="text-[11px] font-bold text-[#168A4A] flex items-center gap-1">
+                          <CheckCircle2 className="w-3.5 h-3.5 text-[#35B86B]" />
+                          <span>Approved — Coordinate handover</span>
+                        </span>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => {
+                              setContactTarget({
+                                title: 'Contact Claimant',
+                                role: 'Claimant',
+                                contact: {
+                                  name: c.claimant_name,
+                                  campus: c.claimant_campus,
+                                  email: (c as any).claimant_email,
+                                  phone: (c as any).claimant_phone,
+                                  avatar: c.claimant_avatar
+                                },
+                                itemName: item.title
+                              });
+                              setContactModalOpen(true);
+                            }}
+                            className="px-3.5 py-2 rounded-xl bg-white hover:bg-[#EEF8F1] text-[#102018] border border-[#E3ECE6] font-bold text-xs flex items-center justify-center gap-1.5 touch-target"
+                          >
+                            <Mail className="w-3.5 h-3.5 text-[#35B86B]" />
+                            <span>Contact Claimant</span>
+                          </button>
+                          <button
+                            onClick={() => handleResolveClaim(c.id)}
+                            className="btn-primary px-4 py-2 text-xs flex items-center justify-center gap-1.5 touch-target"
+                          >
+                            <CheckCircle2 className="w-3.5 h-3.5" />
+                            <span>Confirm Handed Over</span>
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Resolved */}
+                    {c.status === 'RESOLVED' && (
+                      <div className="text-[11px] font-bold text-[#168A4A] flex items-center gap-1 pt-1">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-[#35B86B]" />
+                        <span>Returned to claimant and verified resolved 🎉</span>
                       </div>
                     )}
                   </div>
@@ -443,7 +631,7 @@ export function ItemDetailsPage() {
 
         {/* Right Column: Desktop Action Box, Reporter Profile, AI Potential Matches */}
         <div className="lg:col-span-5 space-y-5 sm:space-y-6">
-          {/* Desktop Only Action Box (Already shown on mobile right after Details) */}
+          {/* Desktop Only Action Box */}
           <div className="hidden lg:block">
             <ActionBox />
           </div>
@@ -464,7 +652,7 @@ export function ItemDetailsPage() {
             </div>
             <div className="text-[11px] text-[#66756C] bg-[#F7FBF8] p-3 rounded-xl border border-[#E3ECE6] flex items-center gap-2">
               <ShieldCheck className="w-4 h-4 text-[#35B86B] shrink-0" />
-              <span>Contact details stay private until ownership is verified and approved.</span>
+              <span>Contact details stay private until ownership claim is approved.</span>
             </div>
           </div>
 
@@ -513,6 +701,21 @@ export function ItemDetailsPage() {
             setClaimTargetItem(null);
             loadItemDetails();
           }}
+        />
+      )}
+
+      {/* Contact Modal */}
+      {contactTarget && (
+        <ContactModal
+          isOpen={contactModalOpen}
+          onClose={() => {
+            setContactModalOpen(false);
+            setContactTarget(null);
+          }}
+          title={contactTarget.title}
+          role={contactTarget.role}
+          contact={contactTarget.contact}
+          itemName={contactTarget.itemName}
         />
       )}
     </div>
