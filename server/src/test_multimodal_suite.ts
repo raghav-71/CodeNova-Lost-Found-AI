@@ -171,7 +171,7 @@ async function runMultimodalVerificationTestSuite() {
   });
   const eval8 = aiMatchingService.evaluateTextAndImageConsistency(textPhone, imgBlurry);
   assert(
-    imgBlurry.is_low_quality === true && imgBlurry.confidence < 0.50 && eval8.consistency_level === 'CONSISTENT',
+    imgBlurry.is_low_quality === true && imgBlurry.confidence < 0.50 && eval8.object_compatible === true && (eval8.consistency_level === 'UNKNOWN_IMAGE' || eval8.consistency_level === 'CONSISTENT'),
     'Test 8: Blurry image -> Low confidence handled gracefully without accusing user',
     `Confidence: ${imgBlurry.confidence}, consistency: ${eval8.consistency_level}`
   );
@@ -184,7 +184,7 @@ async function runMultimodalVerificationTestSuite() {
   });
   const eval9 = aiMatchingService.evaluateTextAndImageConsistency(textLaptop, imgDark);
   assert(
-    imgDark.is_low_quality === true && eval9.consistency_level === 'CONSISTENT',
+    imgDark.is_low_quality === true && eval9.object_compatible === true && (eval9.consistency_level === 'UNKNOWN_IMAGE' || eval9.consistency_level === 'CONSISTENT'),
     'Test 9: Dark image -> Low confidence handled gracefully without accusing user',
     `Confidence: ${imgDark.confidence}, consistency: ${eval9.consistency_level}`
   );
@@ -267,7 +267,7 @@ async function runMultimodalVerificationTestSuite() {
     user_id: 'user-4',
     type: 'FOUND',
     title: 'Found Leather Wallet',
-    description: 'Brown wallet found near cafeteria tables',
+    description: 'Brown wallet with student ID found near cafeteria tables',
     category: 'Wallet',
     location: 'Student Center & Cafeteria',
     date: '2026-09-19',

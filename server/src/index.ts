@@ -10,6 +10,7 @@ import { createClaimsRouter } from './routes/claims.js';
 import { createNotificationsRouter } from './routes/notifications.js';
 import { createStatsRouter } from './routes/stats.js';
 import { createAdminRouter } from './routes/admin.js';
+import { createAiRouter } from './routes/ai.js';
 import { generalLimiter } from './middleware/rateLimiters.js';
 
 dotenv.config({ path: path.resolve(process.cwd(), '../.env') });
@@ -103,7 +104,8 @@ app.get('/', (_req, res) => {
       claims: '/api/claims',
       notifications: '/api/notifications',
       stats: '/api/stats',
-      admin: '/api/admin'
+      admin: '/api/admin',
+      ai: '/api/ai'
     }
   });
 });
@@ -126,6 +128,7 @@ app.use('/api/claims', createClaimsRouter());
 app.use('/api/notifications', createNotificationsRouter());
 app.use('/api/stats', createStatsRouter());
 app.use('/api/admin', createAdminRouter());
+app.use('/api/ai', createAiRouter());
 
 // 5. Global Production Error Handler (Debug mode off in production)
 app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {

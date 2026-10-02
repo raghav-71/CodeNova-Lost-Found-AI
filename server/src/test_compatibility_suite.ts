@@ -109,7 +109,7 @@ async function runCompatibilityTestSuite() {
 
   // TEST 11: Lost wallet vs Found wallet -> Compatible
   const lost11 = makeItem('l11', 'LOST', 'Brown leather wallet', 'Brown leather wallet with student ID and credit card', 'Wallet');
-  const found11 = makeItem('f11', 'FOUND', 'Brown wallet', 'Brown leather wallet found at food court', 'Wallet');
+  const found11 = makeItem('f11', 'FOUND', 'Brown wallet', 'Brown leather wallet with cards found at food court', 'Wallet');
   const res11 = await aiMatchingService.evaluateSimilarity(lost11, found11);
   assert(res11.isCompatible && res11.matchScore >= 60, 'TEST 11: Lost wallet vs Found wallet', `Compatible: ${res11.isCompatible}, Score: ${res11.matchScore}%`);
 

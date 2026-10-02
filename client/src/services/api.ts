@@ -141,6 +141,41 @@ class ApiClient {
     });
   }
 
+  // AI V2 specialized endpoints
+  async compareAiItems(itemA: any, itemB: any) {
+    return this.request<{
+      isCompatible: boolean;
+      score: number;
+      confidenceLevel: string;
+      featureMatches: string[];
+      mismatches: string[];
+      reasoning: string;
+      safetyDisclaimer: string;
+    }>('/ai/compare', {
+      method: 'POST',
+      body: JSON.stringify({ itemA, itemB })
+    });
+  }
+
+  async analyzeImageAi(formData: FormData) {
+    return this.request<{
+      analysis: any;
+      safetyDisclaimer: string;
+    }>('/ai/analyze-image', {
+      method: 'POST',
+      body: formData
+    });
+  }
+
+  async getAiItemMatches(id: string) {
+    return this.request<{
+      itemId: string;
+      itemType: string;
+      matchesCount: number;
+      matches: any[];
+    }>(`/ai/items/${id}/matches`);
+  }
+
   async createItem(formData: FormData) {
     return this.request<{ 
       message: string; 
