@@ -33,5 +33,8 @@
     "findit-ai"
   ],
   "author": "FindIt AI Team",
-  "license": "MIT"
+  "license": "MIT",
+  "dependencies": {
+    "@rolldown/binding-linux-x64-gnu": "^1.2.9"
+  }
 }
