@@ -17,4 +17,11 @@ async function startServer() {
   }
 }
 
-startServer();
+// Export configured Express application for Vercel execution
+export { app };
+export default app;
+
+// Only start standalone HTTP server when running in local development (not on Vercel)
+if (!process.env.VERCEL) {
+  startServer();
+}
