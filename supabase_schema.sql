@@ -118,7 +118,7 @@ CREATE TABLE IF NOT EXISTS public.claims (
     proof_notes TEXT,
     contact_share_consent BOOLEAN NOT NULL DEFAULT TRUE,
     resolution_notes TEXT,
-    status TEXT NOT NULL CHECK (status IN ('PENDING', 'APPROVED', 'REJECTED', 'CANCELLED')) DEFAULT 'PENDING',
+    status TEXT NOT NULL CHECK (status IN ('PENDING', 'APPROVED', 'REJECTED', 'RESOLVED', 'CANCELLED')) DEFAULT 'PENDING',
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -157,9 +157,9 @@ BEGIN
     INSERT INTO public.profiles (id, full_name, email, avatar_url, college, phone)
     VALUES (
         NEW.id,
-        COALESCE(NEW.raw_user_meta_data->>'full_name', NEW.raw_user_meta_data->>'name', split_part(NEW.email, '@', 1)),
+        COALESCE(NEW.raw_user_meta_data->>'full_name', NEW.raw_user_meta_data->>'name', split_part(NEW.email, '@', 1), 'Campus Member'),
         NEW.email,
-        COALESCE(NEW.raw_user_meta_data->>'avatar_url', 'https://api.dicebear.com/7.x/bottts/svg?seed=' || encode(digest(NEW.email, 'sha256'), 'hex')),
+        COALESCE(NEW.raw_user_meta_data->>'avatar_url', 'https://api.dicebear.com/7.x/bottts/svg?seed=' || NEW.id::text),
         COALESCE(NEW.raw_user_meta_data->>'college', NEW.raw_user_meta_data->>'campus', 'Central Campus'),
         NEW.raw_user_meta_data->>'phone'
     )
@@ -170,7 +170,7 @@ BEGIN
         phone = COALESCE(EXCLUDED.phone, public.profiles.phone),
         updated_at = NOW();
 
-    -- Create welcome notification
+    -- Create welcome notification safely
     INSERT INTO public.notifications (id, user_id, type, title, message, link_url)
     VALUES (
         gen_random_uuid(),
@@ -182,6 +182,8 @@ BEGIN
     );
 
     RETURN NEW;
+EXCEPTION WHEN OTHERS THEN
+    RETURN NEW;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
@@ -189,6 +191,22 @@ DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
 CREATE TRIGGER on_auth_user_created
     AFTER INSERT ON auth.users
     FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
+
+-- Backfill profiles for existing auth.users
+INSERT INTO public.profiles (id, full_name, email, avatar_url, college, phone)
+SELECT 
+    id,
+    COALESCE(raw_user_meta_data->>'full_name', raw_user_meta_data->>'name', split_part(email, '@', 1), 'Campus Member'),
+    COALESCE(email, id::text || '@campus.edu'),
+    COALESCE(raw_user_meta_data->>'avatar_url', 'https://api.dicebear.com/7.x/bottts/svg?seed=' || id::text),
+    COALESCE(raw_user_meta_data->>'college', raw_user_meta_data->>'campus', 'Central Campus'),
+    raw_user_meta_data->>'phone'
+FROM auth.users
+ON CONFLICT (id) DO UPDATE
+SET full_name = EXCLUDED.full_name,
+    avatar_url = EXCLUDED.avatar_url,
+    college = EXCLUDED.college,
+    phone = COALESCE(EXCLUDED.phone, public.profiles.phone);
 
 -- ====================================================================
 -- 9. ROW LEVEL SECURITY (RLS) POLICIES

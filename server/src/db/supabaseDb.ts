@@ -123,14 +123,36 @@ class SupabaseDatabaseService {
     this.checkPostgrestAvailability();
   }
 
-  private async checkPostgrestAvailability() {
-    if (!isSupabaseServerConfigured) return;
+  public isPostgrestAvailable(): boolean {
+    return this.isPostgrestReady;
+  }
+
+  public async checkPostgrestAvailability(): Promise<boolean> {
+    if (!isSupabaseServerConfigured) {
+      this.isPostgrestReady = false;
+      return false;
+    }
     try {
       const { error } = await supabaseAdmin.from('profiles').select('id').limit(1);
-      this.isPostgrestReady = !error;
+      const ready = !error;
+      if (ready !== this.isPostgrestReady) {
+        this.isPostgrestReady = ready;
+        if (ready) {
+          console.log('✅ [Supabase PostgreSQL] Authoritative database connection verified and ACTIVE.');
+        } else {
+          console.warn('⚠️ [Supabase PostgreSQL] Table check failed:', error?.message);
+        }
+      }
+      return this.isPostgrestReady;
     } catch {
       this.isPostgrestReady = false;
+      return false;
     }
+  }
+
+  private async ensurePostgrest(): Promise<boolean> {
+    if (this.isPostgrestReady) return true;
+    return this.checkPostgrestAvailability();
   }
 
   // --------------------------------------------------------------------------
@@ -1242,7 +1264,17 @@ class SupabaseDatabaseService {
         const itemsFound = foundRes.count || 0;
         const resolvedItems = resolvedRes.count || 0;
         const totalItems = itemsLost + itemsFound;
-        const activeClaims = claimsRes.count || 0;
+        let activeClaims = claimsRes.count || 0;
+        if (userItems.data && userItems.data.length > 0) {
+          const uids = userItems.data.map(i => i.id);
+          const receivedClaimsRes = await supabaseAdmin
+            .from('claims')
+            .select('id', { count: 'exact', head: true })
+            .in('item_id', uids)
+            .neq('claimant_id', userId)
+            .eq('status', 'PENDING');
+          activeClaims += (receivedClaimsRes.count || 0);
+        }
         const unreadNotifications = notifsRes.count || 0;
 
         let potentialMatches = 0;
@@ -1277,11 +1309,11 @@ class SupabaseDatabaseService {
     const resolvedItems = userItems.filter(i => i.status === 'RESOLVED').length;
     const totalItems = itemsLost + itemsFound;
 
+    const userItemIds = new Set(userItems.map(i => i.id));
     const activeClaims = Array.from(this.memoryClaims.values()).filter(
-      c => c.claimant_id === userId && c.status === 'PENDING'
+      c => c.status === 'PENDING' && (c.claimant_id === userId || (c.item_owner_id === userId || userItemIds.has(c.item_id)))
     ).length;
 
-    const userItemIds = new Set(userItems.map(i => i.id));
     const potentialMatches = Array.from(this.memoryMatches.values()).filter(
       m => userItemIds.has(m.lost_item_id) || userItemIds.has(m.found_item_id)
     ).length;

@@ -108,6 +108,22 @@ class ApiClient {
     return this.request<{ items: any[]; total: number; limit: number; offset: number }>(`/items?${query.toString()}`);
   }
 
+  async getMyItems(params: {
+    type?: string;
+    status?: string;
+    sort?: string;
+    limit?: number;
+    offset?: number;
+  } = {}) {
+    const query = new URLSearchParams();
+    Object.entries(params).forEach(([key, val]) => {
+      if (val !== undefined && val !== null && val !== '') {
+        query.append(key, String(val));
+      }
+    });
+    return this.request<{ items: any[]; total: number; limit: number; offset: number }>(`/items/my-items?${query.toString()}`);
+  }
+
   async aiSearch(data: { query: string; type?: string; imageBase64?: string }) {
     return this.request<{
       query: string;

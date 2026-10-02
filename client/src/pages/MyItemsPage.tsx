@@ -24,7 +24,7 @@ export function MyItemsPage() {
     if (!user) return;
     setIsLoading(true);
     try {
-      const res = await api.getItems({ userId: user.id });
+      const res = await api.getMyItems();
       setItems(res.items || []);
     } catch (err) {
       console.error('Failed to load my items:', err);

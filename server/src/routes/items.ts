@@ -93,7 +93,32 @@ export function createItemsRouter(): Router {
     }
   });
 
-  // List & Search items with advanced filters
+  // Authenticated user's personal reported items (Strict User Isolation)
+  router.get('/my-items', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const { type, status, sort = 'newest', limit = 50, offset = 0 } = req.query;
+      const { items, total } = await supabaseDb.getItems({
+        userId: req.user!.id,
+        type: type ? String(type) : undefined,
+        status: status ? String(status) : undefined,
+        sort: sort ? String(sort) : undefined,
+        limit: Number(limit),
+        offset: Number(offset)
+      });
+
+      return res.json({
+        items,
+        total,
+        limit: Number(limit),
+        offset: Number(offset)
+      });
+    } catch (err: any) {
+      console.error('Fetch my-items error:', err);
+      return res.status(500).json({ error: 'Failed to retrieve your reported items.' });
+    }
+  });
+
+  // List & Search public campus items for discovery and matching
   router.get('/', optionalAuthenticateToken, async (req: AuthenticatedRequest, res: Response) => {
     try {
       const {
@@ -103,11 +128,12 @@ export function createItemsRouter(): Router {
         location,
         status,
         sort = 'newest',
-        userId,
         limit = 50,
         offset = 0
       } = req.query;
 
+      // Security: Do NOT trust frontend req.query.userId for private record exposure.
+      // If a user wants their own items, they must use GET /api/items/my-items.
       const { items, total } = await supabaseDb.getItems({
         q: q ? String(q) : undefined,
         type: type ? String(type) : undefined,
@@ -115,7 +141,6 @@ export function createItemsRouter(): Router {
         location: location ? String(location) : undefined,
         status: status ? String(status) : undefined,
         sort: sort ? String(sort) : undefined,
-        userId: userId ? String(userId) : undefined,
         limit: Number(limit),
         offset: Number(offset)
       });

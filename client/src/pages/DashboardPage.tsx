@@ -34,6 +34,7 @@ export function DashboardPage() {
   const [myItems, setMyItems] = useState<Item[]>([]);
   const [recentMatches, setRecentMatches] = useState<PotentialMatch[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'my-items' | 'recent-reports'>('my-items');
   const [recentReports, setRecentReports] = useState<Item[]>([]);
   
@@ -46,26 +47,18 @@ export function DashboardPage() {
   const loadDashboardData = async () => {
     if (!user) return;
     setIsLoading(true);
+    setLoadError(null);
     try {
       // 1. Fetch authenticated user's personal stats from Supabase
       const userStatsRes = await api.getUserStats();
-      if (userStatsRes.stats) {
+      if (userStatsRes && userStatsRes.stats) {
         setStats(userStatsRes.stats);
       } else {
-        setStats({
-          itemsLost: 0,
-          itemsFound: 0,
-          totalItems: 0,
-          resolvedItems: 0,
-          activeClaims: 0,
-          potentialMatches: 0,
-          unreadNotifications: 0,
-          recoveryRate: 0
-        });
+        throw new Error('Personal statistics could not be loaded.');
       }
 
-      // 2. Fetch authenticated user's reported items
-      const myItemsRes = await api.getItems({ userId: user.id });
+      // 2. Fetch authenticated user's reported items using strict user-scoped endpoint
+      const myItemsRes = await api.getMyItems();
       const userReportedItems = myItemsRes.items || [];
       setMyItems(userReportedItems);
 
@@ -86,8 +79,9 @@ export function DashboardPage() {
         }
       }
       setRecentMatches(matchesGathered);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to load dashboard data:', err);
+      setLoadError('Unable to load your dashboard. Please try again.');
     } finally {
       setIsLoading(false);
     }
@@ -161,7 +155,17 @@ export function DashboardPage() {
       </div>
 
       {/* Personalized Statistics Row (Isolated to authenticated user's real Supabase data) */}
-      {isLoading ? (
+      {loadError ? (
+        <div className="p-5 rounded-2xl bg-[#FFF8F8] border border-[#FFE4E6] flex flex-col sm:flex-row items-center justify-between gap-4 shadow-sm">
+          <div className="text-xs sm:text-sm font-bold text-[#E11D48]">{loadError}</div>
+          <button
+            onClick={loadDashboardData}
+            className="px-4 py-2 rounded-xl text-xs font-extrabold bg-[#E11D48] text-white hover:bg-[#BE123C] transition-all touch-target"
+          >
+            Retry
+          </button>
+        </div>
+      ) : isLoading ? (
         <StatsSkeleton />
       ) : stats ? (
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
