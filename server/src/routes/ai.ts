@@ -3,11 +3,17 @@ import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
 import crypto from 'crypto';
-import { supabaseDb } from '../db/supabaseDb.js';
+import { supabaseDb, ItemRecord } from '../db/supabaseDb.js';
 import { AuthenticatedRequest, optionalAuthenticateToken } from '../middleware/auth.js';
-import { aiMatchingService } from '../services/aiMatcher.js';
+import { aiMatchingService, NormalizedItemType, ExtractedIntent } from '../services/aiMatcher.js';
 import { aiLimiter } from '../middleware/rateLimiters.js';
 import { sanitizeString } from '../middleware/validation.js';
+import {
+  multilingualEngine,
+  StructuredSearchIntent,
+  ConversationSession
+} from '../services/multilingualEngine.js';
+import { conversationManager } from '../services/conversationManager.js';
 
 const uploadDir = path.resolve(process.cwd(), 'uploads');
 if (!fs.existsSync(uploadDir)) {
@@ -55,12 +61,222 @@ const upload = multer({
   }
 });
 
+/**
+ * Helper to retrieve candidate items from database respecting conversational filters
+ */
+async function retrieveCandidatesForConversationalFilters(
+  activeFilters: ConversationSession['activeFilters'],
+  targetTypeOverride?: string
+): Promise<ItemRecord[]> {
+  let targetType: string | undefined = undefined;
+  if (targetTypeOverride && targetTypeOverride !== 'ALL') {
+    targetType = targetTypeOverride;
+  } else if (activeFilters.item_type === 'LOST') {
+    targetType = 'FOUND';
+  } else if (activeFilters.item_type === 'FOUND') {
+    targetType = 'LOST';
+  }
+
+  const { items: allActiveItems } = await supabaseDb.getItems({
+    type: targetType,
+    limit: 150
+  });
+
+  const compatibleCandidates: Array<{ item: ItemRecord; heuristicScore: number }> = [];
+
+  for (const item of allActiveItems) {
+    const candNorm = aiMatchingService.normalizeItem(item.description, item.title, item.category);
+
+    // If an object is specified in activeFilters, check compatibility
+    if (activeFilters.object && activeFilters.object !== 'item') {
+      const intentNorm: NormalizedItemType = {
+        object_type: activeFilters.object,
+        category: (activeFilters.category || 'other') as any,
+        subcategory: (activeFilters.subcategory || 'other') as any,
+        brand: activeFilters.brand,
+        model: activeFilters.model,
+        color: (activeFilters.color && activeFilters.color[0]) || undefined,
+        features: []
+      };
+
+      const compat = aiMatchingService.checkCompatibility(intentNorm, candNorm);
+      if (!compat.isCompatible) {
+        continue;
+      }
+    }
+
+    let score = 30;
+
+    // Subcategory match
+    if (activeFilters.subcategory && candNorm.subcategory === activeFilters.subcategory) {
+      score += 25;
+    }
+
+    // Color match
+    if (activeFilters.color && activeFilters.color.length > 0 && candNorm.color) {
+      const hasColor = activeFilters.color.some(c => c.toLowerCase() === candNorm.color?.toLowerCase());
+      if (hasColor) score += 20;
+    }
+
+    // Brand match
+    if (activeFilters.brand && candNorm.brand) {
+      if (activeFilters.brand.toLowerCase() === candNorm.brand.toLowerCase()) {
+        score += 25;
+      }
+    }
+
+    // Location filter / proximity
+    if (activeFilters.location) {
+      const locProximity = aiMatchingService.calculateLocationProximity(item.location, activeFilters.location);
+      score += locProximity.score;
+    }
+
+    // Date filter / proximity
+    if (activeFilters.date && item.date) {
+      const dateProximity = aiMatchingService.calculateTemporalProximity(item.date, activeFilters.date);
+      score += dateProximity.score;
+      if (item.date === activeFilters.date) {
+        score += 30;
+      }
+    }
+
+    // Keyword / Title match
+    const itemText = `${item.title} ${item.description} ${item.characteristics || ''} ${item.location}`.toLowerCase();
+    if (activeFilters.object && itemText.includes(activeFilters.object.toLowerCase())) {
+      score += 15;
+    }
+
+    compatibleCandidates.push({ item, heuristicScore: score });
+  }
+
+  compatibleCandidates.sort((a, b) => b.heuristicScore - a.heuristicScore);
+  return compatibleCandidates.slice(0, 15).map(c => c.item);
+}
+
 export function createAiRouter(): Router {
   const router = Router();
 
   /**
+   * POST /api/ai/conversational-search
+   * Multilingual Natural Language & Conversational AI Search
+   */
+  router.post('/conversational-search', aiLimiter, optionalAuthenticateToken, async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const {
+        query,
+        sessionId,
+        type = 'ALL',
+        preferredLanguage,
+        imageBase64
+      } = req.body;
+
+      if (!query || String(query).trim().length === 0) {
+        return res.status(400).json({ error: 'Please enter a query or voice transcription to search.' });
+      }
+
+      const cleanQuery = sanitizeString(String(query).trim());
+      const session = conversationManager.getOrCreateSession(sessionId, req.user?.id);
+
+      // 1. Language Detection
+      const detection = multilingualEngine.detectLanguage(cleanQuery);
+      if (preferredLanguage && detection.language === 'en') {
+        detection.language = preferredLanguage;
+      }
+
+      // 2. Multilingual Intent Extraction relative to conversation context
+      const intent: StructuredSearchIntent = await multilingualEngine.extractMultilingualIntent(cleanQuery, session);
+
+      // 3. Handle Special Conversational Intents
+      if (intent.intent === 'explain_match' && session.resultContextItemIds.length > 0) {
+        // User asked: "Why is this a match?" / "tell me why this matched"
+        const targetItemId = session.resultContextItemIds[0];
+        const targetItem = await supabaseDb.getItemById(targetItemId);
+
+        const explanation = await multilingualEngine.generateConversationalResponse(
+          intent,
+          1,
+          detection,
+          targetItem?.title || undefined
+        );
+
+        conversationManager.mergeTurn(session.sessionId, cleanQuery, intent, explanation, session.resultContextItemIds);
+
+        return res.json({
+          sessionId: session.sessionId,
+          originalQuery: cleanQuery,
+          detectedLanguage: detection,
+          normalizedIntent: intent,
+          activeFilters: session.activeFilters,
+          message: explanation,
+          results: targetItem ? [{ item: targetItem, match_score: 90, matching_attributes: ['Same Item Type', 'Proximity Match'], differences: [] }] : [],
+          followUpSuggestions: multilingualEngine.getLocalizedFollowUpSuggestions(detection.language),
+          usedFallback: false
+        });
+      }
+
+      // 4. Retrieve Candidates using active conversational filters
+      const targetFilterType = type !== 'ALL' ? type : intent.item_type;
+      const candidates = await retrieveCandidatesForConversationalFilters(session.activeFilters, targetFilterType);
+
+      // 5. Evaluate and Rank Candidates
+      const legacyIntent: ExtractedIntent = {
+        normalizedQuery: intent.normalized_query,
+        item_type: intent.item_type,
+        object: intent.object.value,
+        category: intent.category.value,
+        subcategory: intent.subcategory,
+        brand: intent.brand || undefined,
+        model: intent.model || undefined,
+        color: intent.color[0],
+        colors: intent.color,
+        location: intent.location.normalized || intent.location.raw || undefined,
+        date: intent.date.normalized || intent.date.raw || undefined,
+        time: intent.time || undefined,
+        relative_date: intent.date.raw || undefined,
+        resolved_date: intent.date.normalized || undefined,
+        identifying_features: intent.features,
+        features: intent.features,
+        keywords: intent.keywords,
+        confidence: intent.object.confidence
+      };
+
+      const results = await aiMatchingService.evaluateNaturalLanguageMatches(cleanQuery, legacyIntent, candidates);
+      const resultItemIds = results.map(r => r.item.id);
+
+      // 6. Generate Conversational AI Response in the user's detected language
+      const aiResponseText = await multilingualEngine.generateConversationalResponse(
+        intent,
+        results.length,
+        detection,
+        results[0]?.item?.title
+      );
+
+      // 7. Update Session State
+      conversationManager.mergeTurn(session.sessionId, cleanQuery, intent, aiResponseText, resultItemIds);
+
+      const suggestions = multilingualEngine.getLocalizedFollowUpSuggestions(detection.language);
+
+      return res.json({
+        sessionId: session.sessionId,
+        originalQuery: cleanQuery,
+        detectedLanguage: detection,
+        normalizedIntent: intent,
+        activeFilters: session.activeFilters,
+        message: aiResponseText,
+        results,
+        followUpSuggestions: suggestions,
+        totalCandidatesScanned: candidates.length,
+        usedFallback: false
+      });
+    } catch (err: any) {
+      console.error('Conversational AI search error:', err);
+      return res.status(500).json({ error: 'Failed to process conversational search.' });
+    }
+  });
+
+  /**
    * POST /api/ai/search
-   * Natural Language & Multimodal Semantic Search
+   * Legacy and single-turn endpoint upgraded with Multilingual Intelligence
    */
   router.post('/search', aiLimiter, optionalAuthenticateToken, async (req: AuthenticatedRequest, res: Response) => {
     try {
@@ -70,26 +286,59 @@ export function createAiRouter(): Router {
       }
 
       const cleanQuery = sanitizeString(String(query).trim());
+      const detection = multilingualEngine.detectLanguage(cleanQuery);
+      const intent = await multilingualEngine.extractMultilingualIntent(cleanQuery);
 
-      // 1. Stage 1: Preprocessing & Intent Extraction
-      const intent = await aiMatchingService.extractQueryIntent(cleanQuery, imageBase64);
+      const legacyIntent: ExtractedIntent = {
+        normalizedQuery: intent.normalized_query,
+        item_type: intent.item_type,
+        object: intent.object.value,
+        category: intent.category.value,
+        subcategory: intent.subcategory,
+        brand: intent.brand || undefined,
+        model: intent.model || undefined,
+        color: intent.color[0],
+        colors: intent.color,
+        location: intent.location.normalized || intent.location.raw || undefined,
+        date: intent.date.normalized || intent.date.raw || undefined,
+        time: intent.time || undefined,
+        relative_date: intent.date.raw || undefined,
+        resolved_date: intent.date.normalized || undefined,
+        identifying_features: intent.features,
+        features: intent.features,
+        keywords: intent.keywords,
+        confidence: intent.object.confidence
+      };
 
-      // 2. Stage 2: Database Candidate Retrieval
-      const candidates = await aiMatchingService.findCandidatesForIntent(intent, type);
-
-      // 3. Stage 3 & 4: Multimodal Evaluation, Ranking & Deep Reasoner
-      const results = await aiMatchingService.evaluateNaturalLanguageMatches(cleanQuery, intent, candidates);
+      const candidates = await aiMatchingService.findCandidatesForIntent(legacyIntent, type);
+      const results = await aiMatchingService.evaluateNaturalLanguageMatches(cleanQuery, legacyIntent, candidates);
 
       return res.json({
         query: cleanQuery,
-        normalizedQuery: intent.normalizedQuery || cleanQuery,
-        intent,
+        detectedLanguage: detection,
+        normalizedQuery: intent.normalized_query || cleanQuery,
+        intent: legacyIntent,
+        structuredIntent: intent,
         totalCandidatesScanned: candidates.length,
         results
       });
     } catch (err: any) {
       console.error('AI search endpoint error:', err);
       return res.status(500).json({ error: 'Failed to process AI natural language search.' });
+    }
+  });
+
+  /**
+   * DELETE /api/ai/conversation/:sessionId
+   * Resets conversation context
+   */
+  router.delete('/conversation/:sessionId', optionalAuthenticateToken, async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const { sessionId } = req.params;
+      conversationManager.clearSession(sessionId);
+      return res.json({ message: 'Conversation context reset successfully.', sessionId });
+    } catch (err: any) {
+      return res.status(500).json({ error: 'Failed to reset conversation.' });
     }
   });
 

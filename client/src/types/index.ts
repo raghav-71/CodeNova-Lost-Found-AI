@@ -222,8 +222,39 @@ export interface AIMatchSearchResult {
 
 export interface AISearchResponse {
   query: string;
+  detectedLanguage?: MultilingualDetection;
   intent: ExtractedIntent;
+  structuredIntent?: any;
   totalCandidatesScanned: number;
   results: AIMatchSearchResult[];
+}
+
+export interface MultilingualDetection {
+  language: string;
+  language_name: string;
+  is_mixed: boolean;
+  languages: string[];
+  confidence: number;
+}
+
+export interface ConversationalSearchResponse {
+  sessionId: string;
+  originalQuery: string;
+  detectedLanguage: MultilingualDetection;
+  normalizedIntent: any;
+  activeFilters: {
+    item_type: 'LOST' | 'FOUND' | 'ALL';
+    object?: string;
+    category?: string;
+    brand?: string;
+    color?: string[];
+    location?: string;
+    date?: string;
+  };
+  message: string;
+  results: AIMatchSearchResult[];
+  followUpSuggestions: string[];
+  totalCandidatesScanned: number;
+  usedFallback: boolean;
 }
 

@@ -1895,7 +1895,7 @@ STRICT SCHEMA (Return only JSON):
     return dotProduct / (Math.sqrt(norm1) * Math.sqrt(norm2));
   }
 
-  private calculateLocationProximity(loc1: string, loc2: string): { score: number; feature: string; reason: string } {
+  public calculateLocationProximity(loc1: string, loc2: string): { score: number; feature: string; reason: string } {
     const l1 = loc1.toLowerCase().trim();
     const l2 = loc2.toLowerCase().trim();
 
@@ -1932,7 +1932,7 @@ STRICT SCHEMA (Return only JSON):
     return { score: 0, feature: '', reason: '' };
   }
 
-  private calculateTemporalProximity(date1: string, date2: string): { score: number; feature: string; reason: string } {
+  public calculateTemporalProximity(date1: string, date2: string): { score: number; feature: string; reason: string } {
     try {
       const d1 = new Date(date1).getTime();
       const d2 = new Date(date2).getTime();

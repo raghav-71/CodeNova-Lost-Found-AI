@@ -1,23 +1,26 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import { api } from '../services/api.js';
-import { Item, AIMatchSearchResult, ExtractedIntent } from '../types/index.js';
+import { Item, AIMatchSearchResult, ExtractedIntent, MultilingualDetection } from '../types/index.js';
 import { ItemCard } from '../components/ItemCard.js';
 import { ItemFilters } from '../components/ItemFilters.js';
 import { AISearchBar } from '../components/AISearchBar.js';
 import { AISearchResultCard } from '../components/AISearchResultCard.js';
 import { CardSkeleton } from '../components/SkeletonLoader.js';
 import { 
+  Sparkles, 
+  Filter, 
   LayoutGrid, 
   List, 
-  Layers, 
-  PlusCircle, 
-  Sparkles, 
-  SlidersHorizontal,
-  Tag,
-  MapPin,
-  Calendar,
+  MapPin, 
+  Tag, 
+  Calendar, 
+  AlertCircle,
+  PlusCircle,
   Search,
+  Bot,
+  Languages,
+  RotateCcw,
   CheckCircle2
 } from 'lucide-react';
 
@@ -26,22 +29,22 @@ export function BrowseItemsPage() {
   const initialMode = searchParams.get('mode') === 'ai' || Boolean(searchParams.get('q')) ? 'ai' : 'ai';
   const initialQuery = searchParams.get('q') || '';
 
-  // Mode: 'ai' (Natural Language) vs 'filters' (Traditional Catalog)
+  // Mode state: 'ai' (Conversational Multilingual Search) or 'filters' (Manual Grid)
   const [searchMode, setSearchMode] = useState<'ai' | 'filters'>(initialMode);
 
-  // Catalog items & states
-  const [items, setItems] = useState<Item[]>([]);
-  const [total, setTotal] = useState(0);
-  const [isLoading, setIsLoading] = useState(true);
-
-  // AI Search states
+  // Conversational AI Search states
+  const [sessionId, setSessionId] = useState<string>(() => `sess_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`);
+  const [detectedLanguage, setDetectedLanguage] = useState<MultilingualDetection | null>(null);
+  const [aiMessage, setAiMessage] = useState<string | null>(null);
+  const [activeFilters, setActiveFilters] = useState<any | null>(null);
+  const [followUpSuggestions, setFollowUpSuggestions] = useState<string[]>([]);
   const [aiResults, setAiResults] = useState<AIMatchSearchResult[]>([]);
   const [aiIntent, setAiIntent] = useState<ExtractedIntent | null>(null);
   const [isAiLoading, setIsAiLoading] = useState(false);
   const [aiSearchStep, setAiSearchStep] = useState(1);
   const [hasSearchedAi, setHasSearchedAi] = useState(false);
 
-  // Filter States
+  // Traditional Search & Filter States
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
   const [selectedType, setSelectedType] = useState('ALL');
@@ -49,30 +52,36 @@ export function BrowseItemsPage() {
   const [selectedLocation, setSelectedLocation] = useState('All Campus Locations');
   const [selectedStatus, setSelectedStatus] = useState('ALL');
   const [selectedSort, setSelectedSort] = useState('newest');
+
+  // Directory Catalog Data states
+  const [items, setItems] = useState<Item[]>([]);
+  const [total, setTotal] = useState(0);
+  const [isLoading, setIsLoading] = useState(false);
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
 
   // Debounce traditional search query
   useEffect(() => {
     const handler = setTimeout(() => {
       setDebouncedQuery(searchQuery);
-    }, 300);
+    }, 350);
     return () => clearTimeout(handler);
   }, [searchQuery]);
 
-  // Load standard items for directory
+  // Load Catalog Items
   const loadItems = useCallback(async () => {
     setIsLoading(true);
     try {
       const res = await api.getItems({
-        q: debouncedQuery,
-        type: selectedType,
-        category: selectedCategory,
+        q: debouncedQuery || undefined,
+        type: selectedType === 'ALL' ? undefined : selectedType,
+        category: selectedCategory === 'ALL' ? undefined : selectedCategory,
         location: selectedLocation === 'All Campus Locations' ? undefined : selectedLocation,
-        status: selectedStatus,
-        sort: selectedSort
+        status: selectedStatus === 'ALL' ? undefined : selectedStatus,
+        sort: selectedSort,
+        limit: 50
       });
-      setItems(res.items || []);
-      setTotal(res.total || 0);
+      setItems(res.items);
+      setTotal(res.total);
     } catch (err) {
       console.error('Failed to load items:', err);
     } finally {
@@ -84,27 +93,40 @@ export function BrowseItemsPage() {
     loadItems();
   }, [loadItems]);
 
-  // Trigger AI Search
-  const handleAiSearch = async (queryText: string, type: string, imageBase64?: string) => {
+  // Trigger Multilingual Conversational AI Search
+  const handleConversationalSearch = async (
+    queryText: string,
+    type: string,
+    imageBase64?: string,
+    isVoice?: boolean,
+    preferredLanguage?: string
+  ) => {
     setIsAiLoading(true);
     setHasSearchedAi(true);
     setAiSearchStep(1);
 
-    // Multi-stage progress visualizer timer
     const stepTimer1 = setTimeout(() => setAiSearchStep(2), 500);
     const stepTimer2 = setTimeout(() => setAiSearchStep(3), 1100);
 
     try {
-      const res = await api.aiSearch({
+      const res = await api.conversationalSearch({
         query: queryText,
+        sessionId,
         type: type === 'ALL' ? undefined : type,
-        imageBase64
+        preferredLanguage,
+        imageBase64,
+        isVoice
       });
 
-      setAiIntent(res.intent);
+      if (res.sessionId) setSessionId(res.sessionId);
+      if (res.detectedLanguage) setDetectedLanguage(res.detectedLanguage);
+      if (res.normalizedIntent) setAiIntent(res.normalizedIntent);
+      if (res.activeFilters) setActiveFilters(res.activeFilters);
+      if (res.message) setAiMessage(res.message);
       setAiResults(res.results || []);
+      setFollowUpSuggestions(res.followUpSuggestions || []);
     } catch (err) {
-      console.error('AI search failed:', err);
+      console.error('Conversational AI search failed:', err);
     } finally {
       clearTimeout(stepTimer1);
       clearTimeout(stepTimer2);
@@ -112,10 +134,24 @@ export function BrowseItemsPage() {
     }
   };
 
+  const handleClearConversationContext = async () => {
+    try {
+      await api.resetConversationSession(sessionId);
+    } catch {}
+    setSessionId(`sess_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`);
+    setDetectedLanguage(null);
+    setAiMessage(null);
+    setActiveFilters(null);
+    setAiIntent(null);
+    setAiResults([]);
+    setFollowUpSuggestions([]);
+    setHasSearchedAi(false);
+  };
+
   // Run initial query if present in URL
   useEffect(() => {
     if (initialQuery) {
-      handleAiSearch(initialQuery, 'ALL');
+      handleConversationalSearch(initialQuery, 'ALL');
     }
   }, []);
 
@@ -138,112 +174,127 @@ export function BrowseItemsPage() {
             Campus Lost & Found Discovery
           </h1>
           <p className="text-xs sm:text-sm text-[#66756C] mt-1 font-medium">
-            Search naturally with AI semantic understanding or browse using traditional campus filters
+            Search naturally with multilingual conversational AI or browse using traditional campus filters
           </p>
         </div>
 
         {/* Search Mode Switcher Tabs */}
-        <div className="w-full sm:w-auto grid grid-cols-2 sm:flex items-center bg-white p-1 rounded-2xl border border-[#E3ECE6] shadow-sm">
+        <div className="flex items-center bg-white p-1 rounded-2xl border border-[#E3ECE6] shadow-sm self-start sm:self-auto shrink-0">
           <button
             onClick={() => setSearchMode('ai')}
-            className={`flex items-center justify-center gap-1.5 px-3.5 sm:px-4 py-2 rounded-xl text-xs font-bold transition-all touch-target ${
+            className={`flex items-center gap-2 px-3.5 sm:px-4 py-2 rounded-xl text-xs font-bold transition-all touch-target ${
               searchMode === 'ai'
                 ? 'bg-[#35B86B] text-white shadow-sm'
                 : 'text-[#66756C] hover:text-[#102018]'
             }`}
           >
-            <Sparkles className="w-3.5 h-3.5" />
+            <Sparkles className="w-4 h-4" />
             <span>AI Natural Search</span>
           </button>
           <button
             onClick={() => setSearchMode('filters')}
-            className={`flex items-center justify-center gap-1.5 px-3.5 sm:px-4 py-2 rounded-xl text-xs font-bold transition-all touch-target ${
+            className={`flex items-center gap-2 px-3.5 sm:px-4 py-2 rounded-xl text-xs font-bold transition-all touch-target ${
               searchMode === 'filters'
                 ? 'bg-[#35B86B] text-white shadow-sm'
                 : 'text-[#66756C] hover:text-[#102018]'
             }`}
           >
-            <SlidersHorizontal className="w-3.5 h-3.5" />
-            <span>Filter Catalog</span>
+            <Filter className="w-4 h-4" />
+            <span>Campus Catalog</span>
           </button>
         </div>
       </div>
 
       {/* =========================================================================
-          MODE 1: AI NATURAL LANGUAGE SEARCH
+          MODE 1: MULTILINGUAL CONVERSATIONAL AI SEARCH
           ========================================================================= */}
       {searchMode === 'ai' && (
-        <div className="space-y-6">
-          {/* AI Search Prompt Component */}
+        <div className="space-y-5">
+          {/* AI Search & Voice Bar */}
           <AISearchBar
-            onSearch={handleAiSearch}
+            onSearch={handleConversationalSearch}
             isLoading={isAiLoading}
             searchStep={aiSearchStep}
             initialQuery={initialQuery}
+            detectedLanguage={detectedLanguage}
+            activeFilters={activeFilters}
+            onClearContext={handleClearConversationContext}
           />
 
-          {/* AI Extracted Intent Summary Box */}
-          {aiIntent && (
-            <div className="rounded-3xl bg-white border border-[#E3ECE6] p-5 sm:p-6 card-3d space-y-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <div className="w-7 h-7 rounded-xl bg-[#EEF8F1] flex items-center justify-center text-brand-600">
-                    <Sparkles className="w-4 h-4" />
+          {/* AI Conversational Response Message */}
+          {aiMessage && (
+            <div className="p-4 sm:p-5 rounded-3xl bg-[#EEF8F1] border border-[#D5ECD9] flex items-start gap-3 shadow-sm animate-in fade-in">
+              <div className="w-9 h-9 rounded-2xl bg-white border border-[#D5ECD9] flex items-center justify-center text-[#168A4A] shadow-sm shrink-0 mt-0.5">
+                <Bot className="w-5 h-5 text-[#35B86B]" />
+              </div>
+              <div className="min-w-0 flex-1 space-y-1">
+                <div className="flex items-center justify-between">
+                  <div className="text-xs font-bold text-[#168A4A] flex items-center gap-1.5">
+                    <span>FindIt AI Response</span>
+                    {detectedLanguage && (
+                      <span className="text-[10px] font-semibold text-[#168A4A] bg-white px-2 py-0.5 rounded-full border border-[#D5ECD9]">
+                        {detectedLanguage.language_name}
+                      </span>
+                    )}
                   </div>
-                  <h3 className="text-xs sm:text-sm font-bold text-[#102018]">
-                    AI Understanding & Extracted Query Intent:
-                  </h3>
                 </div>
-                <span className="text-[11px] font-semibold text-brand-700 bg-[#EEF8F1] px-2.5 py-0.5 rounded-full">
-                  Confidence {(aiIntent.confidence ? Math.round(aiIntent.confidence * 100) : 95)}%
-                </span>
+                <p className="text-xs sm:text-sm text-[#102018] font-medium leading-relaxed">
+                  {aiMessage}
+                </p>
               </div>
+            </div>
+          )}
 
-              {/* Extracted Entity Badges */}
-              <div className="flex flex-wrap gap-2 pt-1">
-                {aiIntent.object && (
-                  <span className="inline-flex items-center gap-1 px-3 py-1 rounded-xl bg-[#F7FBF8] border border-[#E3ECE6] text-xs font-semibold text-[#102018]">
-                    <span className="text-[#66756C]">Target:</span> {aiIntent.object}
-                  </span>
-                )}
-                {aiIntent.category && (
-                  <span className="inline-flex items-center gap-1 px-3 py-1 rounded-xl bg-[#EEF8F1] border border-brand-200 text-xs font-bold text-brand-700">
-                    <Tag className="w-3 h-3 text-brand-600" />
-                    <span>Category: {aiIntent.category}</span>
-                  </span>
-                )}
-                {aiIntent.color && (
-                  <span className="inline-flex items-center gap-1 px-3 py-1 rounded-xl bg-[#F7FBF8] border border-[#E3ECE6] text-xs font-semibold text-[#102018]">
-                    <span className="text-[#66756C]">Color:</span> {aiIntent.color}
-                  </span>
-                )}
-                {aiIntent.location && (
-                  <span className="inline-flex items-center gap-1 px-3 py-1 rounded-xl bg-[#F7FBF8] border border-[#E3ECE6] text-xs font-semibold text-[#102018]">
-                    <MapPin className="w-3 h-3 text-brand-600" />
-                    <span>Location: {aiIntent.location}</span>
-                  </span>
-                )}
-                {aiIntent.relative_date && (
-                  <span className="inline-flex items-center gap-1 px-3 py-1 rounded-xl bg-[#F7FBF8] border border-[#E3ECE6] text-xs font-semibold text-[#102018]">
-                    <Calendar className="w-3 h-3 text-[#66756C]" />
-                    <span>Date: {aiIntent.relative_date} {aiIntent.resolved_date ? `(${aiIntent.resolved_date})` : ''}</span>
-                  </span>
-                )}
-                {aiIntent.keywords.map((kw, i) => (
-                  <span key={i} className="text-[11px] font-medium text-[#66756C] bg-slate-100 px-2 py-0.5 rounded-lg">
-                    #{kw}
-                  </span>
-                ))}
-              </div>
+          {/* Context Filter Chips */}
+          {activeFilters && (activeFilters.object || activeFilters.location || activeFilters.date || (activeFilters.color && activeFilters.color.length > 0)) && (
+            <div className="flex flex-wrap items-center gap-2 px-1">
+              <span className="text-[11px] font-bold text-[#66756C]">Active Context:</span>
+              {activeFilters.object && (
+                <span className="text-xs font-semibold px-2.5 py-1 rounded-xl bg-white border border-[#E3ECE6] text-[#102018]">
+                  Item: <span className="text-[#168A4A] font-bold">{activeFilters.object}</span>
+                </span>
+              )}
+              {activeFilters.color && activeFilters.color.length > 0 && (
+                <span className="text-xs font-semibold px-2.5 py-1 rounded-xl bg-white border border-[#E3ECE6] text-[#102018]">
+                  Color: <span className="text-[#168A4A] font-bold">{activeFilters.color.join(', ')}</span>
+                </span>
+              )}
+              {activeFilters.location && (
+                <span className="text-xs font-semibold px-2.5 py-1 rounded-xl bg-white border border-[#E3ECE6] text-[#102018]">
+                  Location: <span className="text-[#168A4A] font-bold">{activeFilters.location}</span>
+                </span>
+              )}
+              {activeFilters.date && (
+                <span className="text-xs font-semibold px-2.5 py-1 rounded-xl bg-white border border-[#E3ECE6] text-[#102018]">
+                  Date: <span className="text-[#168A4A] font-bold">{activeFilters.date}</span>
+                </span>
+              )}
+            </div>
+          )}
+
+          {/* Quick Follow-up Suggestion Chips */}
+          {followUpSuggestions.length > 0 && (
+            <div className="flex flex-wrap items-center gap-1.5 px-1 pt-1">
+              <span className="text-[11px] font-bold text-[#66756C]">Follow-up:</span>
+              {followUpSuggestions.map((sug, i) => (
+                <button
+                  key={i}
+                  type="button"
+                  onClick={() => handleConversationalSearch(sug, 'ALL')}
+                  className="text-xs px-3 py-1.5 rounded-xl bg-white hover:bg-[#EEF8F1] border border-[#E3ECE6] hover:border-[#35B86B] text-[#102018] hover:text-[#168A4A] transition-colors font-medium shadow-sm"
+                >
+                  + {sug}
+                </button>
+              ))}
             </div>
           )}
 
           {/* AI Search Results Header */}
           {hasSearchedAi && (
-            <div className="flex items-center justify-between px-1">
+            <div className="flex items-center justify-between px-1 pt-2">
               <h3 className="text-base sm:text-lg font-extrabold text-[#102018] flex items-center gap-2">
                 <span>Ranked Potential Matches</span>
-                <span className="text-xs font-bold text-brand-700 bg-[#EEF8F1] px-2.5 py-0.5 rounded-full">
+                <span className="text-xs font-bold text-[#168A4A] bg-[#EEF8F1] px-2.5 py-0.5 rounded-full border border-[#D5ECD9]">
                   {aiResults.length} {aiResults.length === 1 ? 'match' : 'matches'}
                 </span>
               </h3>
@@ -257,18 +308,18 @@ export function BrowseItemsPage() {
               <CardSkeleton />
             </div>
           ) : hasSearchedAi && aiResults.length === 0 ? (
-            <div className="rounded-3xl bg-white border border-[#E3ECE6] p-12 text-center space-y-4 card-3d">
-              <div className="w-14 h-14 rounded-2xl bg-[#EEF8F1] flex items-center justify-center mx-auto text-brand-600">
+            <div className="rounded-3xl bg-white border border-[#E3ECE6] p-12 text-center space-y-4 shadow-sm">
+              <div className="w-14 h-14 rounded-2xl bg-[#EEF8F1] border border-[#D5ECD9] flex items-center justify-center mx-auto text-[#168A4A]">
                 <Search className="w-7 h-7" />
               </div>
               <h3 className="text-lg font-bold text-[#102018]">No strong potential matches found</h3>
-              <p className="text-xs text-[#66756C] max-w-md mx-auto leading-relaxed">
+              <p className="text-xs text-[#66756C] max-w-md mx-auto leading-relaxed font-medium">
                 Our AI scanned campus records but did not find high-confidence matches for this description. Try rephrasing or switch to the catalog filters to browse all items.
               </p>
               <div className="flex justify-center gap-3 pt-2">
                 <button
                   onClick={() => setSearchMode('filters')}
-                  className="px-4 py-2 rounded-xl text-xs font-bold bg-[#F7FBF8] hover:bg-[#EEF8F1] text-brand-700 border border-brand-200 transition-colors"
+                  className="px-4 py-2 rounded-xl text-xs font-bold bg-[#F7FBF8] hover:bg-[#EEF8F1] text-[#168A4A] border border-[#D5ECD9] transition-colors"
                 >
                   Browse Full Catalog
                 </button>
@@ -348,41 +399,29 @@ export function BrowseItemsPage() {
 
           {/* Item List / Grid */}
           {isLoading ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-              <CardSkeleton />
-              <CardSkeleton />
-              <CardSkeleton />
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
               <CardSkeleton />
               <CardSkeleton />
               <CardSkeleton />
             </div>
           ) : items.length === 0 ? (
-            <div className="rounded-3xl bg-white border border-[#E3ECE6] p-12 text-center space-y-4 card-3d">
-              <div className="w-14 h-14 rounded-2xl bg-[#EEF8F1] flex items-center justify-center mx-auto text-brand-600">
-                <Layers className="w-7 h-7" />
+            <div className="rounded-3xl bg-white border border-[#E3ECE6] p-12 text-center space-y-4 shadow-sm">
+              <div className="w-14 h-14 rounded-2xl bg-[#EEF8F1] border border-[#D5ECD9] flex items-center justify-center mx-auto text-[#168A4A]">
+                <Search className="w-7 h-7" />
               </div>
-              <h3 className="text-lg font-bold text-[#102018]">No items found</h3>
+              <h3 className="text-base font-bold text-[#102018]">No items found matching criteria</h3>
               <p className="text-xs text-[#66756C] max-w-sm mx-auto font-medium">
-                Hopefully you won't lose anything — but we're ready whenever you do. Try clearing your filters or create a report!
+                Try widening your location or category filters, or switch to AI natural language search.
               </p>
-              <div className="flex justify-center gap-3 pt-2">
-                <button
-                  onClick={handleResetFilters}
-                  className="px-4 py-2 rounded-xl text-xs font-bold bg-[#F7FBF8] hover:bg-[#EEF8F1] text-brand-700 border border-brand-200 transition-colors"
-                >
-                  Clear All Filters
-                </button>
-                <Link
-                  to="/report/lost"
-                  className="btn-primary px-4 py-2 text-xs flex items-center gap-1.5"
-                >
-                  <PlusCircle className="w-3.5 h-3.5" />
-                  <span>Report Lost Item</span>
-                </Link>
-              </div>
+              <button
+                onClick={handleResetFilters}
+                className="btn-primary inline-flex items-center gap-2 px-5 py-2 text-xs"
+              >
+                Reset Filters
+              </button>
             </div>
           ) : (
-            <div className={viewMode === 'grid' ? 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6' : 'space-y-4'}>
+            <div className={viewMode === 'grid' ? 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5' : 'space-y-4'}>
               {items.map((item) => (
                 <ItemCard key={item.id} item={item} />
               ))}

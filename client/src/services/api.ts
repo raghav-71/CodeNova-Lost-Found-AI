@@ -120,6 +120,26 @@ class ApiClient {
     });
   }
 
+  async conversationalSearch(data: {
+    query: string;
+    sessionId?: string;
+    type?: string;
+    preferredLanguage?: string;
+    imageBase64?: string;
+    isVoice?: boolean;
+  }) {
+    return this.request<any>('/ai/conversational-search', {
+      method: 'POST',
+      body: JSON.stringify(data)
+    });
+  }
+
+  async resetConversationSession(sessionId: string) {
+    return this.request<{ message: string; sessionId: string }>(`/ai/conversation/${sessionId}`, {
+      method: 'DELETE'
+    });
+  }
+
   async getItemById(id: string) {
     return this.request<{
       item: any;
