@@ -48,6 +48,16 @@ export function Navbar() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  const loadNotifications = async () => {
+    try {
+      const res = await api.getNotifications();
+      setNotifications(res.notifications.slice(0, 5));
+      setUnreadCount(res.unreadCount);
+    } catch {
+      // ignore
+    }
+  };
+
   useEffect(() => {
     if (user) {
       loadNotifications();
@@ -62,16 +72,6 @@ export function Navbar() {
     setNotifDropdownOpen(false);
     setUserDropdownOpen(false);
   }, [location.pathname]);
-
-  const loadNotifications = async () => {
-    try {
-      const res = await api.getNotifications();
-      setNotifications(res.notifications.slice(0, 5));
-      setUnreadCount(res.unreadCount);
-    } catch {
-      // ignore
-    }
-  };
 
   const handleMarkAllRead = async () => {
     try {
